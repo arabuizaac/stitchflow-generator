@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
-import { Scissors, Download, Sparkles, AlertCircle } from "lucide-react";
+import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack } from "lucide-react";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -16,6 +16,8 @@ import {
   type Measurements,
   type FitType,
 } from "@/lib/patternGenerator";
+import { auditPattern } from "@/lib/patternAudit";
+import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
 
 const DEFAULTS: Measurements = {
   chest: 96,
@@ -40,6 +42,12 @@ const Index = () => {
 
   const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
+  const audit = useMemo(() => (pattern ? auditPattern(pattern) : null), [pattern]);
+  const tilingPlan = useMemo(() => {
+    if (!pattern) return null;
+    const b = getLayoutBounds(pattern);
+    return planTiling(b.widthCm, b.heightCm);
+  }, [pattern]);
 
   const clamped = useMemo(() => clampMeasurements(values), [values]);
   const corrections: string[] = [];
@@ -135,6 +143,29 @@ const Index = () => {
       toast({ title: "Downloaded", description: "Your T-shirt pattern PDF is ready." });
     } finally {
       URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleDownloadTiledPdf = async () => {
+    if (!pattern) return;
+    const bounds = getLayoutBounds(pattern);
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    try {
+      const plan = await addTiledPatternToPdf(pdf, svgString, bounds.widthCm, bounds.heightCm, {
+        title: "StitchFlow – T-Shirt Pattern",
+        subtitle: `Fit ${generated!.fit} · Chest ${generated!.chest}cm`,
+      });
+      pdf.save("stitchflow-tshirt-pattern-tiled.pdf");
+      toast({
+        title: "Tiled PDF downloaded",
+        description: `${plan.pageCount} A4 page${plan.pageCount === 1 ? "" : "s"} (${plan.cols}×${plan.rows}). Print at 100% scale and align using crop marks.`,
+      });
+    } catch (e) {
+      toast({
+        title: "Tiling failed",
+        description: e instanceof Error ? e.message : "Could not generate tiled PDF.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -268,10 +299,28 @@ const Index = () => {
                   : "Generate a pattern to preview"}
               </p>
             </div>
-            <Button onClick={handleDownloadPdf} variant="outline" disabled={!pattern} size="sm">
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Download PDF</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleDownloadTiledPdf}
+                variant="outline"
+                disabled={!pattern}
+                size="sm"
+                title={
+                  tilingPlan
+                    ? `${tilingPlan.pageCount} A4 page${tilingPlan.pageCount === 1 ? "" : "s"} (${tilingPlan.cols}×${tilingPlan.rows})`
+                    : undefined
+                }
+              >
+                <FileStack className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  Tiled PDF{tilingPlan ? ` · ${tilingPlan.pageCount}p` : ""}
+                </span>
+              </Button>
+              <Button onClick={handleDownloadPdf} variant="outline" disabled={!pattern} size="sm">
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Single page</span>
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
@@ -297,6 +346,47 @@ const Index = () => {
                 <span>↕ Grainline</span>
                 <span>Print at 100% scale</span>
               </div>
+
+              {audit && (
+                <div className="mt-4 rounded-md border border-border bg-secondary/40 p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-medium">
+                    {audit.pass ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        Tailor audit · all checks passed
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        Tailor audit · review warnings
+                      </>
+                    )}
+                  </div>
+                  {audit.findings.map((f) => (
+                    <div
+                      key={f.rule}
+                      className={
+                        "text-[11px] flex gap-1.5 " +
+                        (f.severity === "ok"
+                          ? "text-muted-foreground"
+                          : f.severity === "warn"
+                            ? "text-foreground"
+                            : "text-destructive")
+                      }
+                    >
+                      <span>
+                        {f.severity === "ok" ? "✓" : f.severity === "warn" ? "!" : "✗"}
+                      </span>
+                      <span className="flex-1">
+                        {f.message}
+                        {f.detail && (
+                          <span className="text-muted-foreground"> — {f.detail}</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </Card>
