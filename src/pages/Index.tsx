@@ -234,10 +234,11 @@ const Index = () => {
                 onValueChange={(v) => v && setValues((s) => ({ ...s, fit: v as FitType }))}
                 className="grid grid-cols-3 gap-2"
               >
-                {(["slim", "regular", "loose"] as FitType[]).map((f) => (
+                {(["tight", "regular", "relaxed"] as FitType[]).map((f) => (
                   <ToggleGroupItem
                     key={f}
                     value={f}
+                    data-testid={`toggle-fit-${f}`}
                     className="border border-border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground capitalize text-xs h-9"
                   >
                     {f}
@@ -245,7 +246,7 @@ const Index = () => {
                 ))}
               </ToggleGroup>
               <p className="text-[11px] text-muted-foreground">
-                Ease: slim +6 · regular +10 · loose +14 cm
+                Ease: tight +4 · regular +10 · relaxed +18 cm — also drives length &amp; sleeve width
               </p>
             </div>
 

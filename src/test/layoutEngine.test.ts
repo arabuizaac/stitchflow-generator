@@ -8,7 +8,7 @@ import {
   PX_PER_CM,
 } from "@/lib/layoutEngine";
 
-const fits: FitType[] = ["slim", "regular", "loose"];
+const fits: FitType[] = ["tight", "regular", "relaxed"];
 
 // A spread of realistic and extreme measurements.
 const cases: Measurements[] = [];
@@ -22,6 +22,7 @@ for (const fit of fits) {
         shirtLength: length,
         neck: Math.min(chest / 2, chest * 0.35),
         fit,
+        fabric: "cotton",
       });
     }
   }

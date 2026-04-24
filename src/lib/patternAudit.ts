@@ -53,7 +53,10 @@ export function auditPattern(data: PatternData): AuditReport {
   const fullArmhole =
     armholeCurveLength(d.frontWidth, d.armholeDepth, shoulderHalf, shoulderDrop) +
     armholeCurveLength(d.backWidth, d.armholeDepth, shoulderHalf, shoulderDrop);
-  const sleeveCapCm = sleeveCapLength(d.sleeveWidth, d.armholeDepth * 0.7);
+  // Use the actual fit-driven cap height the generator chose (taller cap on
+  // tight fits, shorter on relaxed) — comparing against a fixed factor here
+  // would mis-measure the sleeve.
+  const sleeveCapCm = sleeveCapLength(d.sleeveWidth, d.capHeight);
   // Cap should be a few percent longer than armhole (cap ease) — that's
   // expected, not a defect. Treat under-shooting or overshooting beyond
   // 8% as the warning threshold.
@@ -89,22 +92,25 @@ export function auditPattern(data: PatternData): AuditReport {
     detail: `neckline=${d.necklineLength.toFixed(1)}cm · stretch=${(stretch * 100).toFixed(0)}% · neck=${m.neck.toFixed(1)}cm`,
   });
 
-  // 3. Sleeve width vs armhole depth proportion. With the cap solved
-  // against the actual armhole length, this ratio sits naturally in the
-  // 0.9–1.6 range for any plausible body block.
+  // 3. Sleeve width vs armhole depth proportion. With fit-driven cap
+  // heights, tight fits yield a tall narrow sleeve (~0.8×) while relaxed
+  // fits yield a short wide sleeve (~1.7×). Both are valid drafting
+  // outcomes; we just guard against truly degenerate ratios.
   const ratio = d.sleeveWidth / d.armholeDepth;
   findings.push({
     rule: "sleeve-armhole-proportion",
-    severity: ratio >= 0.9 && ratio <= 1.6 ? "ok" : "warn",
+    severity: ratio >= 0.75 && ratio <= 1.85 ? "ok" : "warn",
     message:
-      ratio >= 0.9 && ratio <= 1.6
+      ratio >= 0.75 && ratio <= 1.85
         ? "Sleeve width is proportional to armhole depth."
-        : `Sleeve/armhole ratio ${ratio.toFixed(2)} is outside the 0.9–1.6 range.`,
+        : `Sleeve/armhole ratio ${ratio.toFixed(2)} is outside the 0.75–1.85 range.`,
     detail: `sleeveWidth=${d.sleeveWidth.toFixed(1)}cm · armholeDepth=${d.armholeDepth.toFixed(1)}cm`,
   });
 
   // 4. Body aspect ratio (length / chest-half) should not be extreme.
-  const aspect = m.shirtLength / d.halfChest;
+  // Use the *effective* shirt length, which is what the pattern actually
+  // produced after the fit's lengthDelta was applied.
+  const aspect = d.effectiveShirtLength / d.halfChest;
   findings.push({
     rule: "body-aspect-ratio",
     severity: aspect >= 0.9 && aspect <= 2.4 ? "ok" : "warn",
@@ -112,7 +118,7 @@ export function auditPattern(data: PatternData): AuditReport {
       aspect >= 0.9 && aspect <= 2.4
         ? "Body proportions look balanced."
         : `Body aspect ratio ${aspect.toFixed(2)} is unusual (target 0.9–2.4).`,
-    detail: `length=${m.shirtLength}cm · halfChest=${d.halfChest.toFixed(1)}cm`,
+    detail: `length=${d.effectiveShirtLength.toFixed(1)}cm · halfChest=${d.halfChest.toFixed(1)}cm`,
   });
 
   // 5. Neckband must reach and grip the neckline. When stretched to

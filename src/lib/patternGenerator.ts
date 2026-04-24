@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export type FitType = "slim" | "regular" | "loose";
+export type FitType = "tight" | "regular" | "relaxed";
 export type FabricType = "cotton" | "jersey" | "rib";
 
 export interface FabricProfile {
@@ -22,6 +22,34 @@ export const FABRICS: Record<FabricType, FabricProfile> = {
   cotton: { stretch: 0.05, recovery: 0.95 },
   jersey: { stretch: 0.2, recovery: 0.9 },
   rib: { stretch: 0.4, recovery: 0.95 },
+};
+
+export interface FitProfile {
+  /** Wearing ease added to chest circumference, in cm. */
+  ease: number;
+  /** Centimetres added to (or removed from) the requested shirt length. */
+  lengthDelta: number;
+  /** Cap height as a fraction of armhole depth — taller cap = narrower sleeve. */
+  capHeightFactor: number;
+  /** Multiplier on the fabric-derived sleeve cap ease (controls sleeve width). */
+  sleeveEaseFactor: number;
+  /** Extra cm added to chest/4 for armhole depth. */
+  armholeExtra: number;
+}
+
+/**
+ * Calibrated fit profiles that drive *visibly distinct* pattern geometry.
+ *
+ * Three levers per fit:
+ *  - body width via `ease`
+ *  - shirt length via `lengthDelta`
+ *  - sleeve width via `capHeightFactor` (taller cap → narrower sleeve) and
+ *    `sleeveEaseFactor` (multiplies the cap ease above the armhole)
+ */
+export const FITS: Record<FitType, FitProfile> = {
+  tight:   { ease: 4,  lengthDelta: -4, capHeightFactor: 0.78, sleeveEaseFactor: 0.4, armholeExtra: 2 },
+  regular: { ease: 10, lengthDelta:  0, capHeightFactor: 0.70, sleeveEaseFactor: 1.0, armholeExtra: 4 },
+  relaxed: { ease: 18, lengthDelta:  4, capHeightFactor: 0.58, sleeveEaseFactor: 1.6, armholeExtra: 6 },
 };
 
 export interface Measurements {
@@ -46,7 +74,7 @@ export const MeasurementsSchema = z.object({
   sleeveLength: z.number().finite().min(10, "Sleeve length must be at least 10 cm").max(100, "Sleeve length must be 100 cm or less"),
   shirtLength: z.number().finite().min(30, "Shirt length must be at least 30 cm").max(150, "Shirt length must be 150 cm or less"),
   neck: z.number().finite().min(20, "Neck must be at least 20 cm").max(80, "Neck must be 80 cm or less"),
-  fit: z.enum(["slim", "regular", "loose"]),
+  fit: z.enum(["tight", "regular", "relaxed"]),
   fabric: z.enum(["cotton", "jersey", "rib"]).default("cotton"),
 });
 
@@ -68,7 +96,11 @@ export interface PatternData {
     frontWidth: number;
     backWidth: number;
     armholeDepth: number;
+    /** Sleeve cap height actually used (fit-driven). */
+    capHeight: number;
     sleeveWidth: number;
+    /** Final shirt length after applying the fit's lengthDelta. */
+    effectiveShirtLength: number;
     necklineLength: number;
     frontNecklineLength: number;
     backNecklineLength: number;
@@ -76,6 +108,8 @@ export interface PatternData {
     ease: number;
     fabric: FabricType;
     fabricProfile: FabricProfile;
+    fit: FitType;
+    fitProfile: FitProfile;
     /** Effective stretch the band is engineered against (stretch × recovery). */
     effectiveStretch: number;
   };
@@ -84,8 +118,10 @@ export interface PatternData {
 
 const MM = 10; // 1 cm = 10 mm = 10 SVG units
 
-const EASE: Record<FitType, number> = { slim: 6, regular: 10, loose: 14 };
-const ARMHOLE_EXTRA: Record<FitType, number> = { slim: 3, regular: 4, loose: 5 };
+/** Sleeve cap must clear the armhole by at most this fraction (3% per spec). */
+const MAX_CAP_EXCESS = 0.03;
+/** Iterative scaling tolerance, in cm (well inside the ±0.5 cm spec). */
+const SLEEVE_TOLERANCE_CM = 0.05;
 
 // Seam allowances in cm
 const SA = {
@@ -189,23 +225,49 @@ export function sleeveCapLength(W: number, cap: number): number {
 /**
  * Solve for the sleeve width whose cap arc length equals `targetCm`.
  *
- * Cap length is monotonically increasing in W for fixed cap height, so
- * a binary search converges quickly. Returns the width in cm.
+ * Iterative proportional scaling: cap length is roughly linear in W for
+ * fixed cap height, so each step scales W by `target / current`. This
+ * converges to ±0.5 mm in 4–8 iterations for any realistic input.
+ * Falls back to bisection if the proportional step ever overshoots.
+ *
+ * Returns `{ width, capLength, iterations, converged }` so callers can
+ * verify the solver hit its tolerance.
  */
-export function solveSleeveWidthForCap(targetCm: number, capHeightCm: number): number {
-  // Lower bound: a degenerate cap of zero width still has length ≈ 2·cap.
-  // Upper bound: enough head-room to cover any plausible target.
-  let lo = Math.max(1, capHeightCm * 0.5);
-  let hi = Math.max(targetCm, capHeightCm * 4);
-  // Push hi out until it overshoots the target (in case the initial
-  // estimate undershoots for unusual ratios).
-  for (let i = 0; i < 20 && sleeveCapLength(hi, capHeightCm) < targetCm; i++) hi *= 1.5;
-  for (let i = 0; i < 40; i++) {
-    const mid = (lo + hi) / 2;
-    if (sleeveCapLength(mid, capHeightCm) < targetCm) lo = mid;
-    else hi = mid;
+export function solveSleeveWidthForCap(
+  targetCm: number,
+  capHeightCm: number,
+  toleranceCm = SLEEVE_TOLERANCE_CM,
+  maxIterations = 50,
+): { width: number; capLength: number; iterations: number; converged: boolean } {
+  // Seed: at narrow widths the cap is roughly target − 2·cap on the chord;
+  // start at half the target which is always below the answer.
+  let width = Math.max(capHeightCm * 1.5, targetCm * 0.5);
+  let capLength = sleeveCapLength(width, capHeightCm);
+
+  // Bracket [lo, hi] for the bisection fallback.
+  let lo = capHeightCm * 0.5;
+  let hi = Math.max(targetCm * 2, capHeightCm * 4);
+  while (sleeveCapLength(hi, capHeightCm) < targetCm) hi *= 1.5;
+
+  let iterations = 0;
+  let converged = false;
+  for (; iterations < maxIterations; iterations++) {
+    const diff = targetCm - capLength;
+    if (Math.abs(diff) <= toleranceCm) {
+      converged = true;
+      break;
+    }
+    if (capLength < targetCm) lo = width;
+    else hi = width;
+
+    // Proportional scaling step.
+    let next = width * (targetCm / capLength);
+    // Guard: keep the step inside the bracket.
+    if (next <= lo || next >= hi) next = (lo + hi) / 2;
+    width = next;
+    capLength = sleeveCapLength(width, capHeightCm);
   }
-  return (lo + hi) / 2;
+  return { width, capLength, iterations, converged };
 }
 
 /* ---------- Pattern generation ---------- */
@@ -214,18 +276,26 @@ export function generatePattern(input: Measurements): PatternData {
   const m = clampMeasurements(input);
   const fabric = FABRICS[m.fabric];
 
+  const fit = FITS[m.fit];
+
   // Body adjustments for stretch fabrics.
   // Knits hug the body: reduce ease and shorten the armhole slightly so
   // the sleeve doesn't gape. Multipliers stay close to 1 for cotton.
   const easeAdjust = 1 - fabric.stretch * 0.5;        // cotton≈0.975, jersey≈0.9, rib≈0.8
   const armholeAdjust = 1 - fabric.stretch * 0.15;    // cotton≈0.9925, jersey≈0.97, rib≈0.94
 
-  const ease = EASE[m.fit] * easeAdjust;
+  // Fit drives ease (body width), shirt length, cap height (sleeve width)
+  // and cap ease factor — all three pattern-defining levers.
+  const ease = fit.ease * easeAdjust;
   const halfChest = (m.chest + ease) / 2;          // cm
   const frontWidth = halfChest * 0.48;             // cm
   const backWidth = halfChest * 0.52;              // cm
-  const armholeDepth = (m.chest / 4 + ARMHOLE_EXTRA[m.fit]) * armholeAdjust; // cm
-  const capHeight = armholeDepth * 0.7;            // cm
+  const armholeDepth = (m.chest / 4 + fit.armholeExtra) * armholeAdjust; // cm
+  const capHeight = armholeDepth * fit.capHeightFactor;  // cm — fit-driven
+
+  // Apply the fit's length delta and re-clamp so we never go below the
+  // minimum shirt length even on tight fits.
+  const shirtLength = Math.max(60, m.shirtLength + fit.lengthDelta);
 
   const neckWidth = m.neck / 5;                    // cm (half-width on fold)
   const frontNeckDepth = m.neck / 5 + 1;
@@ -235,14 +305,27 @@ export function generatePattern(input: Measurements): PatternData {
   const shoulderDrop = 3;                          // cm
 
   // ---- Sleeve cap matched to actual armhole circumference ----
-  // Real-world drafting rule: cap length = armhole + small "cap ease" so
-  // the sleeve eases smoothly into the bodice. Knits get less ease (the
-  // fabric stretches into the curve); wovens need more for arm movement.
+  // target = armhole × (1 + capEase). The cap ease is fabric-driven
+  // (knits sit smoothly with less ease, wovens need more for movement)
+  // and fit-modulated (relaxed sleeves carry more ease, tight less),
+  // then hard-capped at MAX_CAP_EXCESS so we never exceed the spec's 3%.
   const armholeFrontCm = armholeCurveLength(frontWidth, armholeDepth, shoulderHalf, shoulderDrop);
   const armholeBackCm = armholeCurveLength(backWidth, armholeDepth, shoulderHalf, shoulderDrop);
   const armholeFullCm = armholeFrontCm + armholeBackCm;
-  const capEase = Math.max(0, 0.05 - fabric.stretch * 0.1); // cotton≈4.5%, jersey≈3%, rib≈1%
-  const sleeveWidth = solveSleeveWidthForCap(armholeFullCm * (1 + capEase), capHeight);
+  const fabricCapEase = Math.max(0, 0.05 - fabric.stretch * 0.1); // cotton≈4.5%, jersey≈3%, rib≈1%
+  const capEase = Math.min(MAX_CAP_EXCESS, fabricCapEase * fit.sleeveEaseFactor);
+  const target = armholeFullCm * (1 + capEase);
+  const solved = solveSleeveWidthForCap(target, capHeight);
+  // Post-condition guard: enforce the spec's "not shorter, not >3% over"
+  // even if the iterative solver lands slightly off in pathological inputs.
+  const minTarget = armholeFullCm;
+  const maxTarget = armholeFullCm * (1 + MAX_CAP_EXCESS);
+  let sleeveWidth = solved.width;
+  if (solved.capLength < minTarget) {
+    sleeveWidth = solveSleeveWidthForCap(minTarget, capHeight).width;
+  } else if (solved.capLength > maxTarget) {
+    sleeveWidth = solveSleeveWidthForCap(maxTarget, capHeight).width;
+  }
 
   // body taper — keep 48/52 split for waist matching the body pieces
   const frontWaist = ((m.chest - 2 + ease) / 2) * 0.48;
@@ -253,7 +336,7 @@ export function generatePattern(input: Measurements): PatternData {
     label: "FRONT",
     halfWidth: frontWidth,
     waistHalf: frontWaist,
-    length: m.shirtLength,
+    length: shirtLength,
     armholeDepth,
     shoulderHalf,
     shoulderDrop,
@@ -266,7 +349,7 @@ export function generatePattern(input: Measurements): PatternData {
     label: "BACK",
     halfWidth: backWidth,
     waistHalf: backWaist,
-    length: m.shirtLength,
+    length: shirtLength,
     armholeDepth,
     shoulderHalf,
     shoulderDrop,
@@ -314,7 +397,9 @@ export function generatePattern(input: Measurements): PatternData {
       frontWidth,
       backWidth,
       armholeDepth,
+      capHeight,
       sleeveWidth,
+      effectiveShirtLength: shirtLength,
       necklineLength: necklineLengthCm,
       frontNecklineLength: frontNecklineCm,
       backNecklineLength: backNecklineCm,
@@ -322,6 +407,8 @@ export function generatePattern(input: Measurements): PatternData {
       ease,
       fabric: m.fabric,
       fabricProfile: fabric,
+      fit: m.fit,
+      fitProfile: fit,
       effectiveStretch,
     },
     measurements: m,
