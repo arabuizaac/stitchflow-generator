@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type FitType = "slim" | "regular" | "loose";
 
 export interface Measurements {
@@ -8,6 +10,21 @@ export interface Measurements {
   neck: number;
   fit: FitType;
 }
+
+/**
+ * Strict input schema. Bounds are intentionally generous on the upper end
+ * so the engine can serve a wide size range, while the lower bounds reject
+ * obviously invalid values before any geometry runs. Sanitization (auto-
+ * correction) happens in `clampMeasurements` after this schema accepts.
+ */
+export const MeasurementsSchema = z.object({
+  chest: z.number().finite().min(40, "Chest must be at least 40 cm").max(200, "Chest must be 200 cm or less"),
+  shoulder: z.number().finite().min(15, "Shoulder must be at least 15 cm").max(80, "Shoulder must be 80 cm or less"),
+  sleeveLength: z.number().finite().min(10, "Sleeve length must be at least 10 cm").max(100, "Sleeve length must be 100 cm or less"),
+  shirtLength: z.number().finite().min(30, "Shirt length must be at least 30 cm").max(150, "Shirt length must be 150 cm or less"),
+  neck: z.number().finite().min(20, "Neck must be at least 20 cm").max(80, "Neck must be 80 cm or less"),
+  fit: z.enum(["slim", "regular", "loose"]),
+});
 
 export interface PatternPiece {
   label: string;
