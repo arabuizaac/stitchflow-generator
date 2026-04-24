@@ -11,6 +11,7 @@ import {
   buildSvgString,
   generatePattern,
   clampMeasurements,
+  getLayoutBounds,
   type Measurements,
   type FitType,
 } from "@/lib/patternGenerator";
