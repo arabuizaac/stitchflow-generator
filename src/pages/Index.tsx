@@ -12,6 +12,7 @@ import {
   generatePattern,
   clampMeasurements,
   getLayoutBounds,
+  MeasurementsSchema,
   type Measurements,
   type FitType,
 } from "@/lib/patternGenerator";
