@@ -12,6 +12,7 @@ import {
   generatePattern,
   clampMeasurements,
   getLayoutBounds,
+  MeasurementsSchema,
   type Measurements,
   type FitType,
 } from "@/lib/patternGenerator";
@@ -42,9 +43,14 @@ const Index = () => {
 
   const clamped = useMemo(() => clampMeasurements(values), [values]);
   const corrections: string[] = [];
-  if (clamped.neck !== values.neck) corrections.push(`Neck reduced to ${clamped.neck.toFixed(1)} cm (max chest/2)`);
-  if (clamped.sleeveLength !== values.sleeveLength) corrections.push(`Sleeve raised to ${clamped.sleeveLength} cm`);
-  if (clamped.shirtLength !== values.shirtLength) corrections.push(`Shirt length raised to ${clamped.shirtLength} cm`);
+  if (clamped.neck !== values.neck)
+    corrections.push(
+      `Neck adjusted to ${clamped.neck.toFixed(1)} cm (must be ≤ chest/2; falls back to chest/3)`,
+    );
+  if (clamped.sleeveLength !== values.sleeveLength)
+    corrections.push(`Sleeve raised to ${clamped.sleeveLength} cm`);
+  if (clamped.shirtLength !== values.shirtLength)
+    corrections.push(`Shirt length raised to ${clamped.shirtLength} cm`);
 
   const handleChange = (key: keyof Omit<Measurements, "fit">, raw: string) => {
     const num = Number(raw);
@@ -53,18 +59,17 @@ const Index = () => {
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
-    const invalid = (Object.entries(values) as [string, number | string][]).find(
-      ([k, v]) => k !== "fit" && (!v || (typeof v === "number" && v <= 0)),
-    );
-    if (invalid) {
+    const parsed = MeasurementsSchema.safeParse(values);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
       toast({
         title: "Invalid measurement",
-        description: `Please enter a positive value for ${invalid[0]}.`,
+        description: first?.message ?? "Please check your inputs.",
         variant: "destructive",
       });
       return;
     }
-    const corrected = clampMeasurements(values);
+    const corrected = clampMeasurements(parsed.data as Measurements);
     setGenerated(corrected);
     setValues(corrected);
     toast({ title: "Pattern generated", description: "T-shirt pattern ready to preview." });
