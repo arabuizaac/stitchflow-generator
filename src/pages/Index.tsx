@@ -299,10 +299,28 @@ const Index = () => {
                   : "Generate a pattern to preview"}
               </p>
             </div>
-            <Button onClick={handleDownloadPdf} variant="outline" disabled={!pattern} size="sm">
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Download PDF</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleDownloadTiledPdf}
+                variant="outline"
+                disabled={!pattern}
+                size="sm"
+                title={
+                  tilingPlan
+                    ? `${tilingPlan.pageCount} A4 page${tilingPlan.pageCount === 1 ? "" : "s"} (${tilingPlan.cols}×${tilingPlan.rows})`
+                    : undefined
+                }
+              >
+                <FileStack className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  Tiled PDF{tilingPlan ? ` · ${tilingPlan.pageCount}p` : ""}
+                </span>
+              </Button>
+              <Button onClick={handleDownloadPdf} variant="outline" disabled={!pattern} size="sm">
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Single page</span>
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
@@ -328,6 +346,47 @@ const Index = () => {
                 <span>↕ Grainline</span>
                 <span>Print at 100% scale</span>
               </div>
+
+              {audit && (
+                <div className="mt-4 rounded-md border border-border bg-secondary/40 p-3 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-medium">
+                    {audit.pass ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        Tailor audit · all checks passed
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        Tailor audit · review warnings
+                      </>
+                    )}
+                  </div>
+                  {audit.findings.map((f) => (
+                    <div
+                      key={f.rule}
+                      className={
+                        "text-[11px] flex gap-1.5 " +
+                        (f.severity === "ok"
+                          ? "text-muted-foreground"
+                          : f.severity === "warn"
+                            ? "text-foreground"
+                            : "text-destructive")
+                      }
+                    >
+                      <span>
+                        {f.severity === "ok" ? "✓" : f.severity === "warn" ? "!" : "✗"}
+                      </span>
+                      <span className="flex-1">
+                        {f.message}
+                        {f.detail && (
+                          <span className="text-muted-foreground"> — {f.detail}</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </Card>
