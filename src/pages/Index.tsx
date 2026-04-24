@@ -69,7 +69,7 @@ const Index = () => {
       });
       return;
     }
-    const corrected = clampMeasurements(parsed.data);
+    const corrected = clampMeasurements(parsed.data as Measurements);
     setGenerated(corrected);
     setValues(corrected);
     toast({ title: "Pattern generated", description: "T-shirt pattern ready to preview." });
