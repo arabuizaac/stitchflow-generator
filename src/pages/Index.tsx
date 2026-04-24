@@ -146,7 +146,28 @@ const Index = () => {
     }
   };
 
-  return (
+  const handleDownloadTiledPdf = async () => {
+    if (!pattern) return;
+    const bounds = getLayoutBounds(pattern);
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    try {
+      const plan = await addTiledPatternToPdf(pdf, svgString, bounds.widthCm, bounds.heightCm, {
+        title: "StitchFlow – T-Shirt Pattern",
+        subtitle: `Fit ${generated!.fit} · Chest ${generated!.chest}cm`,
+      });
+      pdf.save("stitchflow-tshirt-pattern-tiled.pdf");
+      toast({
+        title: "Tiled PDF downloaded",
+        description: `${plan.pageCount} A4 page${plan.pageCount === 1 ? "" : "s"} (${plan.cols}×${plan.rows}). Print at 100% scale and align using crop marks.`,
+      });
+    } catch (e) {
+      toast({
+        title: "Tiling failed",
+        description: e instanceof Error ? e.message : "Could not generate tiled PDF.",
+        variant: "destructive",
+      });
+    }
+  };
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border/60 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
