@@ -17,6 +17,7 @@ import {
   type Measurements,
   type FitType,
   type FabricType,
+  type SizeType,
 } from "@/lib/patternGenerator";
 import { auditPattern } from "@/lib/patternAudit";
 import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
@@ -29,6 +30,14 @@ const DEFAULTS: Measurements = {
   neck: 38,
   fit: "regular",
   fabric: "cotton",
+  size: "M",
+};
+
+const SIZE_LABEL: Record<SizeType, string> = {
+  S: "S",
+  M: "M",
+  L: "L",
+  XL: "XL",
 };
 
 const FABRIC_LABEL: Record<FabricType, string> = {
@@ -224,6 +233,31 @@ const Index = () => {
             <div>
               <h3 className="font-semibold text-lg">Measurements</h3>
               <p className="text-xs text-muted-foreground">All values in centimeters</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Size Grade</Label>
+              <ToggleGroup
+                type="single"
+                value={values.size ?? "M"}
+                onValueChange={(v) => v && setValues((s) => ({ ...s, size: v as SizeType }))}
+                className="grid grid-cols-4 gap-2"
+                data-testid="toggle-size"
+              >
+                {(["S", "M", "L", "XL"] as SizeType[]).map((s) => (
+                  <ToggleGroupItem
+                    key={s}
+                    value={s}
+                    data-testid={`toggle-size-${s}`}
+                    className="border border-border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground text-xs h-9"
+                  >
+                    {SIZE_LABEL[s]}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-[11px] text-muted-foreground">
+                Grade adds to base measurements: chest ±10/20 · shoulder ±3/6 · length ±4/8 cm
+              </p>
             </div>
 
             <div className="space-y-2">

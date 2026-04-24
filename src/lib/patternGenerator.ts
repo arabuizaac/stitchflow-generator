@@ -52,6 +52,29 @@ export const FITS: Record<FitType, FitProfile> = {
   relaxed: { ease: 18, lengthDelta:  4, capHeightFactor: 0.58, sleeveEaseFactor: 1.6, armholeExtra: 6 },
 };
 
+export type SizeType = "S" | "M" | "L" | "XL";
+
+export interface SizeGrade {
+  chest: number;
+  shoulder: number;
+  neck: number;
+  shirtLength: number;
+  sleeveLength: number;
+}
+
+/**
+ * Standard 5 cm chest grade between sizes (industry default for adult tees).
+ * Shoulder, neck, length and sleeve grade proportionally so the silhouette
+ * stays consistent across the run — this is what avoids "scaled-up dwarf"
+ * distortion you get when only chest changes.
+ */
+export const SIZE_GRADES: Record<SizeType, SizeGrade> = {
+  S:  { chest: -10, shoulder: -3,   neck: -2, shirtLength: -4, sleeveLength: -2 },
+  M:  { chest:   0, shoulder:  0,   neck:  0, shirtLength:  0, sleeveLength:  0 },
+  L:  { chest:  10, shoulder:  3,   neck:  2, shirtLength:  4, sleeveLength:  2 },
+  XL: { chest:  20, shoulder:  6,   neck:  4, shirtLength:  8, sleeveLength:  4 },
+};
+
 export interface Measurements {
   chest: number;
   shoulder: number;
@@ -60,6 +83,27 @@ export interface Measurements {
   neck: number;
   fit: FitType;
   fabric: FabricType;
+  /** Size grade applied to the entered base measurements. Defaults to M. */
+  size?: SizeType;
+}
+
+/**
+ * Apply the size grade to base measurements before geometry runs.
+ *
+ * The user enters their *base* (typically M) measurements; choosing a size
+ * adds the grade deltas. This keeps a single source of truth for the
+ * silhouette and lets us produce a graded run S → XL from one input.
+ */
+export function applyGrade(m: Measurements): Measurements {
+  const g = SIZE_GRADES[m.size ?? "M"];
+  return {
+    ...m,
+    chest: m.chest + g.chest,
+    shoulder: m.shoulder + g.shoulder,
+    neck: m.neck + g.neck,
+    shirtLength: m.shirtLength + g.shirtLength,
+    sleeveLength: m.sleeveLength + g.sleeveLength,
+  };
 }
 
 /**
@@ -76,7 +120,20 @@ export const MeasurementsSchema = z.object({
   neck: z.number().finite().min(20, "Neck must be at least 20 cm").max(80, "Neck must be 80 cm or less"),
   fit: z.enum(["tight", "regular", "relaxed"]),
   fabric: z.enum(["cotton", "jersey", "rib"]).default("cotton"),
+  size: z.enum(["S", "M", "L", "XL"]).optional(),
 });
+
+export interface Notch {
+  /** Notch tip on the cut line (mm, in the piece's local coords). */
+  x: number;
+  y: number;
+  /** Outward normal direction (degrees, 0 = +x, 90 = +y). Tick is drawn along this vector. */
+  angle: number;
+  /** Number of parallel ticks: 1 = single (front), 2 = double (back), 3 = triple. */
+  count: 1 | 2 | 3;
+  /** Human-readable label for the audit / debug tooltip. */
+  label: string;
+}
 
 export interface PatternPiece {
   label: string;
@@ -87,6 +144,8 @@ export interface PatternPiece {
   annotations: { x: number; y: number; text: string; size?: number; bold?: boolean }[];
   grainline?: { x1: number; y1: number; x2: number; y2: number };
   foldEdge?: "left" | null;
+  /** Construction notches — V-cuts the tailor uses to align pieces during sewing. */
+  notches?: Notch[];
 }
 
 export interface PatternData {
@@ -112,6 +171,12 @@ export interface PatternData {
     fitProfile: FitProfile;
     /** Effective stretch the band is engineered against (stretch × recovery). */
     effectiveStretch: number;
+    /** Size grade actually applied (S/M/L/XL). Defaults to "M". */
+    size: SizeType;
+    /** Front armhole arc length (cm) — used for notch verification. */
+    armholeFrontCm: number;
+    /** Back armhole arc length (cm) — used for notch verification. */
+    armholeBackCm: number;
   };
   measurements: Measurements;
 }
@@ -154,6 +219,7 @@ export function clampMeasurements(m: Measurements): Measurements {
     shirtLength: Math.max(60, m.shirtLength),
     shoulder: Math.max(20, m.shoulder),
     fabric: m.fabric ?? "cotton",
+    size: m.size ?? "M",
   };
 }
 
@@ -189,6 +255,68 @@ export function bezierQuadLength(p0: Pt, p1: Pt, p2: Pt, tolerance = 0.01): numb
     bezierQuadLength(p0, m01, m012, tolerance / 2) +
     bezierQuadLength(m012, m12, p2, tolerance / 2)
   );
+}
+
+/**
+ * Point on a quadratic Bézier at parameter t∈[0,1].
+ */
+export function bezierQuadPoint(p0: Pt, p1: Pt, p2: Pt, t: number): Pt {
+  const u = 1 - t;
+  return [
+    u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
+    u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1],
+  ];
+}
+
+/**
+ * Tangent (derivative) of a quadratic Bézier at parameter t. Not normalized.
+ */
+export function bezierQuadTangent(p0: Pt, p1: Pt, p2: Pt, t: number): Pt {
+  const u = 1 - t;
+  return [
+    2 * u * (p1[0] - p0[0]) + 2 * t * (p2[0] - p1[0]),
+    2 * u * (p1[1] - p0[1]) + 2 * t * (p2[1] - p1[1]),
+  ];
+}
+
+/**
+ * De Casteljau split: returns the left sub-curve [p0, p1, p2] from 0..t.
+ * The right sub-curve is implicit via `bezierQuadLength(total) − leftLength`.
+ */
+function bezierQuadSplitLeft(p0: Pt, p1: Pt, p2: Pt, t: number): [Pt, Pt, Pt] {
+  const a: Pt = [p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t];
+  const b: Pt = [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+  const m: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  return [p0, a, m];
+}
+
+/**
+ * Find the point on a quadratic Bézier whose arc length from p0 equals
+ * `targetLen`. Returns the point, the unit normal pointing outward (90°
+ * counter-clockwise from the tangent), and the parameter t.
+ *
+ * Uses bisection on t — combined with `bezierQuadLength` on the split
+ * sub-curve, this converges to garment-scale precision in 20 iterations.
+ */
+export function bezierQuadPointAtLength(
+  p0: Pt,
+  p1: Pt,
+  p2: Pt,
+  targetLen: number,
+): { point: Pt; tangent: Pt; t: number } {
+  const total = bezierQuadLength(p0, p1, p2);
+  const target = Math.max(0, Math.min(total, targetLen));
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const m = (lo + hi) / 2;
+    const [a, b, c] = bezierQuadSplitLeft(p0, p1, p2, m);
+    const len = bezierQuadLength(a, b, c);
+    if (len < target) lo = m;
+    else hi = m;
+  }
+  const t = (lo + hi) / 2;
+  return { point: bezierQuadPoint(p0, p1, p2, t), tangent: bezierQuadTangent(p0, p1, p2, t), t };
 }
 
 /**
@@ -273,7 +401,10 @@ export function solveSleeveWidthForCap(
 /* ---------- Pattern generation ---------- */
 
 export function generatePattern(input: Measurements): PatternData {
-  const m = clampMeasurements(input);
+  // Apply size grade *first* (S/M/L/XL deltas are added to the user's
+  // base measurements), then clamp so even the smallest size stays sane.
+  const graded = applyGrade(input);
+  const m = clampMeasurements(graded);
   const fabric = FABRICS[m.fabric];
 
   const fit = FITS[m.fit];
@@ -331,6 +462,18 @@ export function generatePattern(input: Measurements): PatternData {
   const frontWaist = ((m.chest - 2 + ease) / 2) * 0.48;
   const backWaist = ((m.chest - 2 + ease) / 2) * 0.52;
 
+  /* ---- Notch placement (arc-length-based, alignment-guaranteed) ----
+   * Industry convention:
+   *   - FRONT armhole carries one notch at the curve's midpoint.
+   *   - BACK armhole carries two notches, also at the midpoint.
+   *   - Both pieces also carry a shoulder-point notch at the shoulder/
+   *     armhole intersection so the sleeve cap apex can be matched.
+   * Sleeve notches sit at the *same* arc length from the underarm so
+   * the tailor can pin them together without measuring.
+   */
+  const frontNotchAt = armholeFrontCm * 0.5; // cm from the underarm end of front armhole
+  const backNotchAt = armholeBackCm * 0.5;   // cm from the underarm end of back armhole
+
   /* ---- Build FRONT piece (half, cut on fold; left edge = fold) ---- */
   const front = buildBodyPiece({
     label: "FRONT",
@@ -343,6 +486,8 @@ export function generatePattern(input: Measurements): PatternData {
     neckWidth,
     neckDepth: frontNeckDepth,
     cutNote: "Cut 1 on fold",
+    armholeNotchFromUnderarm: frontNotchAt,
+    armholeNotchCount: 1,
   });
 
   const back = buildBodyPiece({
@@ -356,6 +501,8 @@ export function generatePattern(input: Measurements): PatternData {
     neckWidth,
     neckDepth: backNeckDepth,
     cutNote: "Cut 1 on fold",
+    armholeNotchFromUnderarm: backNotchAt,
+    armholeNotchCount: 2,
   });
 
   /* ---- Sleeve ---- */
@@ -363,6 +510,8 @@ export function generatePattern(input: Measurements): PatternData {
     sleeveWidth,
     sleeveLength: m.sleeveLength,
     capHeight,
+    frontNotchFromUnderarm: frontNotchAt,
+    backNotchFromUnderarm: backNotchAt,
   });
 
   /* ---- Neckband (high-precision, fabric-aware) ---- */
@@ -410,6 +559,9 @@ export function generatePattern(input: Measurements): PatternData {
       fit: m.fit,
       fitProfile: fit,
       effectiveStretch,
+      size: m.size ?? "M",
+      armholeFrontCm,
+      armholeBackCm,
     },
     measurements: m,
   };
@@ -428,6 +580,10 @@ interface BodyPieceArgs {
   neckWidth: number;       // cm
   neckDepth: number;       // cm
   cutNote: string;
+  /** Arc length (cm) from the underarm point along the armhole curve. */
+  armholeNotchFromUnderarm: number;
+  /** Single (front) or double (back) tick. */
+  armholeNotchCount: 1 | 2;
 }
 
 function buildBodyPiece(a: BodyPieceArgs): PatternPiece {
@@ -500,6 +656,48 @@ function buildBodyPiece(a: BodyPieceArgs): PatternPiece {
   const cx = bboxW / 2;
   const cy = ah + (H - ah) / 2;
 
+  /* ---- Notches on the armhole curve ----
+   * The armhole quadratic in this piece runs shoulderEnd → armholeEnd
+   * with control armCtrl. We anchor notch placement to the *underarm*
+   * end (armholeEnd) so the same arc-distance lands at the same body
+   * landmark on every garment regardless of overall armhole length.
+   */
+  const armP0: Pt = [shoulderEnd[0], shoulderEnd[1]]; // shoulder end
+  const armP1: Pt = [armCtrl[0], armCtrl[1]];          // control
+  const armP2: Pt = [armholeEnd[0], armholeEnd[1]];    // underarm
+  const armLengthMm = bezierQuadLength(armP0, armP1, armP2);
+  // Distance from the *start* (shoulderEnd) → length − distance-from-underarm.
+  const notchDistFromStart = Math.max(
+    0,
+    Math.min(armLengthMm, armLengthMm - a.armholeNotchFromUnderarm * MM),
+  );
+  const armNotch = bezierQuadPointAtLength(armP0, armP1, armP2, notchDistFromStart);
+  // Outward normal: rotate tangent +90° (curve interior is to the upper-
+  // left of the tangent in this coordinate system, so +90° points outward).
+  const armNotchAngle =
+    (Math.atan2(armNotch.tangent[0], -armNotch.tangent[1]) * 180) / Math.PI;
+
+  const notches: Notch[] = [
+    {
+      // Shoulder-point notch — sits exactly at shoulderEnd, perpendicular
+      // to the shoulder seam (which runs along the slope shoulderEnd →
+      // neckShoulder). This is the single landmark the sleeve cap apex
+      // matches to on assembly.
+      x: shoulderEnd[0],
+      y: shoulderEnd[1],
+      angle: angleOfNormal(neckShoulder, shoulderEnd),
+      count: 1,
+      label: `${a.label} shoulder point`,
+    },
+    {
+      x: armNotch.point[0],
+      y: armNotch.point[1],
+      angle: armNotchAngle,
+      count: a.armholeNotchCount,
+      label: `${a.label} armhole notch (${a.armholeNotchFromUnderarm.toFixed(1)}cm from underarm)`,
+    },
+  ];
+
   return {
     label: a.label,
     width: bboxW,
@@ -513,13 +711,31 @@ function buildBodyPiece(a: BodyPieceArgs): PatternPiece {
       { x: cx, y: cy, text: `${a.halfWidth.toFixed(1)} × ${a.length} cm (half)`, size: 14 },
       { x: cx, y: cy + 22, text: a.cutNote, size: 13 },
     ],
+    notches,
   };
+}
+
+/**
+ * Angle (degrees) of the outward normal at a corner where a seam segment
+ * `from → to` meets the cut edge. The normal is perpendicular to the
+ * segment, rotated so it points outward (away from the piece interior).
+ */
+function angleOfNormal(from: Pt, to: Pt): number {
+  // Tangent direction along the segment.
+  const tx = to[0] - from[0];
+  const ty = to[1] - from[1];
+  // Outward normal = tangent rotated −90° in screen coords (y grows down).
+  return (Math.atan2(-tx, ty) * 180) / Math.PI;
 }
 
 interface SleeveArgs {
   sleeveWidth: number;   // cm (full width at cap)
   sleeveLength: number;  // cm
   capHeight: number;     // cm
+  /** Arc length (cm) along the *front* (left) cap from the underarm. */
+  frontNotchFromUnderarm: number;
+  /** Arc length (cm) along the *back* (right) cap from the underarm. */
+  backNotchFromUnderarm: number;
 }
 
 function buildSleeve(a: SleeveArgs): PatternPiece {
@@ -567,6 +783,73 @@ function buildSleeve(a: SleeveArgs): PatternPiece {
   const cx = W / 2;
   const cy = cap + (L - cap) / 2;
 
+  /* ---- Sleeve notches ----
+   * The cap is two quadratics:
+   *   left  cap: leftCap (underarm-front) → topMid (cap apex)
+   *   right cap: topMid (cap apex)        → rightCap (underarm-back)
+   *
+   * Front notch sits at `frontNotchFromUnderarm` cm from leftCap, going
+   * up the left curve. Back notch sits at `backNotchFromUnderarm` cm
+   * from rightCap going up the right curve. Center notch is at topMid.
+   *
+   * Because the body's armhole notch is computed as the same arc-length
+   * from the underarm, the sleeve and body notches *automatically*
+   * align when the tailor pins underarm-to-underarm.
+   */
+  const leftP0: Pt = [leftCap[0], leftCap[1]];
+  const leftP1: Pt = [leftCtrl[0], leftCtrl[1]];
+  const leftP2: Pt = [topMid[0], topMid[1]];
+  const rightP0: Pt = [topMid[0], topMid[1]];
+  const rightP1: Pt = [rightCtrl[0], rightCtrl[1]];
+  const rightP2: Pt = [rightCap[0], rightCap[1]];
+
+  const leftCapLen = bezierQuadLength(leftP0, leftP1, leftP2);
+  const rightCapLen = bezierQuadLength(rightP0, rightP1, rightP2);
+  // Front notch: distance is measured *from leftCap*, which is start of left curve.
+  const frontDistMm = Math.max(0, Math.min(leftCapLen, a.frontNotchFromUnderarm * MM));
+  const frontNotch = bezierQuadPointAtLength(leftP0, leftP1, leftP2, frontDistMm);
+  // Back notch: distance is measured *from rightCap*, which is end of right curve.
+  const backDistMm = Math.max(0, Math.min(rightCapLen, a.backNotchFromUnderarm * MM));
+  const backNotch = bezierQuadPointAtLength(
+    rightP0,
+    rightP1,
+    rightP2,
+    rightCapLen - backDistMm,
+  );
+
+  // Outward normal for cap notches: tangent rotated so it points up/out
+  // (away from sleeve body). For the left curve the outward direction is
+  // tangent rotated +90° in screen coords; for the right curve it is −90°.
+  const frontAngle =
+    (Math.atan2(-frontNotch.tangent[1], frontNotch.tangent[0]) * 180) / Math.PI - 90;
+  const backAngle =
+    (Math.atan2(-backNotch.tangent[1], backNotch.tangent[0]) * 180) / Math.PI - 90;
+
+  const sleeveNotches: Notch[] = [
+    {
+      // Center notch at the cap apex — matches both shoulder-point notches.
+      x: topMid[0],
+      y: topMid[1],
+      angle: -90, // pointing straight up
+      count: 1,
+      label: `Sleeve cap apex (matches shoulder point)`,
+    },
+    {
+      x: frontNotch.point[0],
+      y: frontNotch.point[1],
+      angle: frontAngle,
+      count: 1,
+      label: `Sleeve front notch (${a.frontNotchFromUnderarm.toFixed(1)}cm from front underarm)`,
+    },
+    {
+      x: backNotch.point[0],
+      y: backNotch.point[1],
+      angle: backAngle,
+      count: 2,
+      label: `Sleeve back notch (${a.backNotchFromUnderarm.toFixed(1)}cm from back underarm)`,
+    },
+  ];
+
   return {
     label: "SLEEVE",
     width: bboxW,
@@ -579,6 +862,7 @@ function buildSleeve(a: SleeveArgs): PatternPiece {
       { x: cx, y: cy + 5, text: `${a.sleeveWidth.toFixed(1)} × ${a.sleeveLength} cm`, size: 14 },
       { x: cx, y: cy + 26, text: "Cut 2 (mirrored)", size: 13 },
     ],
+    notches: sleeveNotches,
   };
 }
 
@@ -610,6 +894,45 @@ function buildNeckband(lengthCm: number, widthCm: number): PatternPiece {
 /* ---------- Layout + SVG ---------- */
 
 import { layoutPieces, MIN_SPACING_PX, PX_PER_CM, type LayoutResult } from "./layoutEngine";
+
+/**
+ * Render a notch as N short parallel ticks centered on (n.x, n.y), each
+ * 6mm long, spaced 2.5mm apart, oriented along the outward normal so they
+ * extend into the seam allowance and don't bleed into the cut piece.
+ *
+ * `angle` is in degrees, measured the standard SVG way (0° = +x, 90° = +y).
+ */
+function renderNotch(n: Notch, color: string): string {
+  const tickLen = 6 * MM * 0.1; // 6 mm in our piece coords (MM is px-per-mm)
+  const half = tickLen / 2;
+  const spacing = 2.5 * MM * 0.1;
+  const rad = (n.angle * Math.PI) / 180;
+  // Normal vector (outward).
+  const nx = Math.cos(rad);
+  const ny = Math.sin(rad);
+  // Tangent (perpendicular to normal) for spacing multiple ticks apart.
+  const tx = -ny;
+  const ty = nx;
+  const ticks: string[] = [];
+  // Center the bundle so 1 tick is on-center, 2 ticks straddle, 3 ticks are
+  // centered with one on-axis, etc.
+  const offset = (n.count - 1) / 2;
+  for (let i = 0; i < n.count; i++) {
+    const k = i - offset;
+    const cx = n.x + tx * spacing * k;
+    const cy = n.y + ty * spacing * k;
+    // Tick goes from the cut edge (inward end) outward into the SA.
+    const x1 = cx - nx * half;
+    const y1 = cy - ny * half;
+    const x2 = cx + nx * half;
+    const y2 = cy + ny * half;
+    ticks.push(
+      `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" />`,
+    );
+  }
+  const title = n.label ? `<title>${n.label}</title>` : "";
+  return `<g stroke="${color}" stroke-width="1.4" stroke-linecap="round" fill="none">${title}${ticks.join("")}</g>`;
+}
 
 export interface BuildSvgOptions {
   /** Container width in px the layout should target. Defaults to 1200. */
@@ -667,6 +990,10 @@ export function renderLayoutSvg(layout: LayoutResult): string {
           </g>
         `
         : "";
+
+      const notches = (piece.notches ?? [])
+        .map((n) => renderNotch(n, stroke))
+        .join("");
 
       const foldH = bbox.height;
       const fold =
