@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
-import { Scissors, Download, Sparkles, AlertCircle } from "lucide-react";
+import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack } from "lucide-react";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -16,6 +16,8 @@ import {
   type Measurements,
   type FitType,
 } from "@/lib/patternGenerator";
+import { auditPattern } from "@/lib/patternAudit";
+import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
 
 const DEFAULTS: Measurements = {
   chest: 96,
@@ -40,6 +42,12 @@ const Index = () => {
 
   const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
+  const audit = useMemo(() => (pattern ? auditPattern(pattern) : null), [pattern]);
+  const tilingPlan = useMemo(() => {
+    if (!pattern) return null;
+    const b = getLayoutBounds(pattern);
+    return planTiling(b.widthCm, b.heightCm);
+  }, [pattern]);
 
   const clamped = useMemo(() => clampMeasurements(values), [values]);
   const corrections: string[] = [];
