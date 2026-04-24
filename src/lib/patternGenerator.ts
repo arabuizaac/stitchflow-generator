@@ -48,12 +48,24 @@ const SA = {
   hem: 2.5,
 };
 
+/**
+ * Sanitize measurements before any geometry is calculated.
+ *
+ * Rules:
+ *  - chest is the primary reference and must be at least 60 cm.
+ *  - shoulder must be at least 20 cm.
+ *  - sleeveLength must be at least 40 cm.
+ *  - shirtLength must be at least 60 cm.
+ *  - neck cannot exceed chest / 2; if it does, fall back to chest / 3
+ *    (a realistic anatomical proportion) instead of an aggressive clip.
+ */
 export function clampMeasurements(m: Measurements): Measurements {
   const chest = Math.max(60, m.chest);
+  const neck = m.neck > chest / 2 ? chest / 3 : Math.max(1, m.neck);
   return {
     ...m,
     chest,
-    neck: Math.min(m.neck, chest / 2),
+    neck,
     sleeveLength: Math.max(40, m.sleeveLength),
     shirtLength: Math.max(60, m.shirtLength),
     shoulder: Math.max(20, m.shoulder),
