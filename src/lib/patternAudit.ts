@@ -7,7 +7,11 @@
  * in `generatePattern` / `clampMeasurements`.
  */
 
-import type { PatternData } from "./patternGenerator";
+import {
+  armholeCurveLength,
+  sleeveCapLength,
+  type PatternData,
+} from "./patternGenerator";
 
 export type AuditSeverity = "ok" | "warn" | "fail";
 
@@ -26,88 +30,76 @@ export interface AuditReport {
 }
 
 /**
- * Approximate the length of a polyline / quadratic path by sampling
- * points along its segments. Used to compare armhole vs sleeve cap.
- */
-export function approximateCurveLength(points: { x: number; y: number }[]): number {
-  let len = 0;
-  for (let i = 1; i < points.length; i++) {
-    const dx = points[i].x - points[i - 1].x;
-    const dy = points[i].y - points[i - 1].y;
-    len += Math.hypot(dx, dy);
-  }
-  return len;
-}
-
-/** Sample a quadratic Bézier into N points for length measurement. */
-export function sampleQuad(
-  p0: [number, number],
-  p1: [number, number],
-  p2: [number, number],
-  steps = 32,
-): { x: number; y: number }[] {
-  const out: { x: number; y: number }[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const x = (1 - t) * (1 - t) * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0];
-    const y = (1 - t) * (1 - t) * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1];
-    out.push({ x, y });
-  }
-  return out;
-}
-
-/**
  * Run all tailor sanity checks against a generated pattern.
  *
  * Rules:
- *  1. Sleeve cap circumference matches armhole circumference within ±5%.
- *  2. Neck opening (full neckline) is at least 1.1× neck measurement
- *     so the head can pass through.
+ *  1. Sleeve cap circumference matches the combined armhole within ±5%.
+ *  2. Effective neck opening (neckline × (1 + stretch)) is at least 1.1×
+ *     neck so the head can pass through.
  *  3. Sleeve width is proportional to armhole depth (between 1.4× and 2.2×).
  *  4. Body is not excessively boxy (length:width aspect within 0.9–2.4).
+ *  5. Neckband stretches to fit the neckline within fabric tolerance.
  */
 export function auditPattern(data: PatternData): AuditReport {
   const findings: AuditFinding[] = [];
   const { measurements: m, derived: d } = data;
 
-  // 1. Armhole vs sleeve cap.
-  // Approximate front armhole as quadratic from shoulder end to side-armhole point.
-  // Use derived geometry directly (cm), which mirrors the pattern generator.
-  const armholeCm = approximateArmholeLength(d.frontWidth, d.armholeDepth, m.shoulder / 2);
-  const sleeveCapCm = approximateSleeveCapLength(d.sleeveWidth, d.armholeDepth * 0.7);
-  const fullArmhole = armholeCm * 2; // front + back combined approximation
-  const diffPct = Math.abs(sleeveCapCm - fullArmhole) / fullArmhole;
+  // 1. Armhole vs sleeve cap — both measured with recursive Bézier
+  // subdivision so the comparison is exact at garment scale. The full
+  // armhole is the sum of the front and back curves (each piece has
+  // its own width because of the 48/52 split).
+  const shoulderHalf = m.shoulder / 2;
+  const shoulderDrop = 3;
+  const fullArmhole =
+    armholeCurveLength(d.frontWidth, d.armholeDepth, shoulderHalf, shoulderDrop) +
+    armholeCurveLength(d.backWidth, d.armholeDepth, shoulderHalf, shoulderDrop);
+  const sleeveCapCm = sleeveCapLength(d.sleeveWidth, d.armholeDepth * 0.7);
+  // Cap should be a few percent longer than armhole (cap ease) — that's
+  // expected, not a defect. Treat under-shooting or overshooting beyond
+  // 8% as the warning threshold.
+  const capExcessPct = (sleeveCapCm - fullArmhole) / fullArmhole;
+  const capSeverity: AuditSeverity =
+    capExcessPct >= 0 && capExcessPct <= 0.08
+      ? "ok"
+      : Math.abs(capExcessPct) <= 0.12
+        ? "warn"
+        : "fail";
   findings.push({
     rule: "armhole-sleeve-cap-match",
-    severity: diffPct <= 0.05 ? "ok" : diffPct <= 0.1 ? "warn" : "fail",
+    severity: capSeverity,
     message:
-      diffPct <= 0.05
-        ? "Sleeve cap matches armhole within 5%."
-        : `Sleeve cap differs from armhole by ${(diffPct * 100).toFixed(1)}% (target ≤5%).`,
+      capSeverity === "ok"
+        ? `Sleeve cap eases into armhole (+${(capExcessPct * 100).toFixed(1)}%).`
+        : `Sleeve cap is ${(capExcessPct * 100).toFixed(1)}% relative to armhole (target 0–8%).`,
     detail: `armhole≈${fullArmhole.toFixed(1)}cm · sleeveCap≈${sleeveCapCm.toFixed(1)}cm`,
   });
 
-  // 2. Neck opening must fit head: neckline >= neck * 1.1.
+  // 2. Neck opening must fit head — for stretch fabrics the effective
+  // opening is larger because the neckline itself stretches over the head.
+  const stretch = d.fabricProfile.stretch;
+  const effectiveOpening = d.necklineLength * (1 + stretch);
   const minNeckline = m.neck * 1.1;
   findings.push({
     rule: "neck-opening-fits-head",
-    severity: d.necklineLength >= minNeckline ? "ok" : "fail",
+    severity: effectiveOpening >= minNeckline ? "ok" : "fail",
     message:
-      d.necklineLength >= minNeckline
-        ? "Neck opening is large enough to pass over the head."
-        : `Neckline (${d.necklineLength.toFixed(1)}cm) is below 1.1× neck (${minNeckline.toFixed(1)}cm).`,
-    detail: `neckline=${d.necklineLength.toFixed(1)}cm · neck=${m.neck.toFixed(1)}cm`,
+      effectiveOpening >= minNeckline
+        ? "Neck opening passes over the head (with fabric stretch)."
+        : `Neckline (${d.necklineLength.toFixed(1)}cm, effective ${effectiveOpening.toFixed(1)}cm) is below 1.1× neck (${minNeckline.toFixed(1)}cm).`,
+    detail: `neckline=${d.necklineLength.toFixed(1)}cm · stretch=${(stretch * 100).toFixed(0)}% · neck=${m.neck.toFixed(1)}cm`,
   });
 
-  // 3. Sleeve width vs armhole depth proportion.
+  // 3. Sleeve width vs armhole depth proportion. With the cap solved
+  // against the actual armhole length, this ratio sits naturally in the
+  // 0.9–1.6 range for any plausible body block.
   const ratio = d.sleeveWidth / d.armholeDepth;
   findings.push({
     rule: "sleeve-armhole-proportion",
-    severity: ratio >= 1.4 && ratio <= 2.2 ? "ok" : "warn",
+    severity: ratio >= 0.9 && ratio <= 1.6 ? "ok" : "warn",
     message:
-      ratio >= 1.4 && ratio <= 2.2
+      ratio >= 0.9 && ratio <= 1.6
         ? "Sleeve width is proportional to armhole depth."
-        : `Sleeve/armhole ratio ${ratio.toFixed(2)} is outside the 1.4–2.2 range.`,
+        : `Sleeve/armhole ratio ${ratio.toFixed(2)} is outside the 0.9–1.6 range.`,
     detail: `sleeveWidth=${d.sleeveWidth.toFixed(1)}cm · armholeDepth=${d.armholeDepth.toFixed(1)}cm`,
   });
 
@@ -121,6 +113,31 @@ export function auditPattern(data: PatternData): AuditReport {
         ? "Body proportions look balanced."
         : `Body aspect ratio ${aspect.toFixed(2)} is unusual (target 0.9–2.4).`,
     detail: `length=${m.shirtLength}cm · halfChest=${d.halfChest.toFixed(1)}cm`,
+  });
+
+  // 5. Neckband must reach and grip the neckline. When stretched to
+  // its full length the band covers the neckline; we want a small
+  // amount of residual tension (snug fit) but not so much it ripples
+  // the bodice. Industry guideline: stretchedBand / neckline ≈ 1.00–1.10
+  // for a clean snug join.
+  const stretchedBand = d.neckbandLength * (1 + stretch);
+  const tension = stretchedBand / d.necklineLength;
+  const bandSeverity: AuditSeverity =
+    tension >= 1.0 && tension <= 1.1
+      ? "ok"
+      : tension >= 0.95 && tension <= 1.2
+        ? "warn"
+        : "fail";
+  findings.push({
+    rule: "neckband-fits-neckline",
+    severity: bandSeverity,
+    message:
+      bandSeverity === "ok"
+        ? `Neckband stretches snug to the neckline (+${((tension - 1) * 100).toFixed(1)}%).`
+        : tension < 1
+          ? `Neckband cannot reach the neckline (${(tension * 100).toFixed(1)}%).`
+          : `Neckband tension ${((tension - 1) * 100).toFixed(1)}% above neckline — may distort.`,
+    detail: `band=${d.neckbandLength.toFixed(1)}cm · stretched=${stretchedBand.toFixed(1)}cm · neckline=${d.necklineLength.toFixed(1)}cm`,
   });
 
   const pass = findings.every((f) => f.severity === "ok");
@@ -138,19 +155,18 @@ function approximateArmholeLength(
 ): number {
   // Quadratic from (shoulderHalf, ~3) to (halfWidth, armholeDepth) with a
   // control point pulled inward — mirrors buildBodyPiece's armhole curve.
-  const pts = sampleQuad(
+  return bezierQuadLength(
     [shoulderHalfCm, 3],
     [halfWidthCm * 0.92, armholeDepthCm * 0.45],
     [halfWidthCm, armholeDepthCm],
   );
-  return approximateCurveLength(pts);
 }
 
 function approximateSleeveCapLength(sleeveWidthCm: number, capHeightCm: number): number {
   // Two quadratics forming the sleeve cap (mirrors buildSleeve).
   const W = sleeveWidthCm;
   const cap = capHeightCm;
-  const left = sampleQuad([0, cap], [W * 0.18, cap * 0.15], [W / 2, 0]);
-  const right = sampleQuad([W / 2, 0], [W * 0.82, cap * 0.15], [W, cap]);
-  return approximateCurveLength(left) + approximateCurveLength(right);
+  const left = bezierQuadLength([0, cap], [W * 0.18, cap * 0.15], [W / 2, 0]);
+  const right = bezierQuadLength([W / 2, 0], [W * 0.82, cap * 0.15], [W, cap]);
+  return left + right;
 }

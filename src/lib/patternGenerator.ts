@@ -1,6 +1,28 @@
 import { z } from "zod";
 
 export type FitType = "slim" | "regular" | "loose";
+export type FabricType = "cotton" | "jersey" | "rib";
+
+export interface FabricProfile {
+  /** Effective stretch ratio (0..1). 0.05 = 5% stretch beyond resting length. */
+  stretch: number;
+  /** Recovery factor (0..1). Higher = the fabric snaps back well after stretching. */
+  recovery: number;
+}
+
+/**
+ * Calibrated fabric properties used by the drafting engine.
+ *
+ * These numbers are conservative averages used by industrial pattern blocks:
+ *  - cotton woven: very low stretch, near-perfect recovery.
+ *  - single jersey knit: medium stretch, good recovery.
+ *  - 1×1 rib knit: high stretch, excellent recovery — the canonical neckband fabric.
+ */
+export const FABRICS: Record<FabricType, FabricProfile> = {
+  cotton: { stretch: 0.05, recovery: 0.95 },
+  jersey: { stretch: 0.2, recovery: 0.9 },
+  rib: { stretch: 0.4, recovery: 0.95 },
+};
 
 export interface Measurements {
   chest: number;
@@ -9,6 +31,7 @@ export interface Measurements {
   shirtLength: number;
   neck: number;
   fit: FitType;
+  fabric: FabricType;
 }
 
 /**
@@ -24,6 +47,7 @@ export const MeasurementsSchema = z.object({
   shirtLength: z.number().finite().min(30, "Shirt length must be at least 30 cm").max(150, "Shirt length must be 150 cm or less"),
   neck: z.number().finite().min(20, "Neck must be at least 20 cm").max(80, "Neck must be 80 cm or less"),
   fit: z.enum(["slim", "regular", "loose"]),
+  fabric: z.enum(["cotton", "jersey", "rib"]).default("cotton"),
 });
 
 export interface PatternPiece {
@@ -46,8 +70,14 @@ export interface PatternData {
     armholeDepth: number;
     sleeveWidth: number;
     necklineLength: number;
+    frontNecklineLength: number;
+    backNecklineLength: number;
     neckbandLength: number;
     ease: number;
+    fabric: FabricType;
+    fabricProfile: FabricProfile;
+    /** Effective stretch the band is engineered against (stretch × recovery). */
+    effectiveStretch: number;
   };
   measurements: Measurements;
 }
@@ -75,6 +105,7 @@ const SA = {
  *  - shirtLength must be at least 60 cm.
  *  - neck cannot exceed chest / 2; if it does, fall back to chest / 3
  *    (a realistic anatomical proportion) instead of an aggressive clip.
+ *  - fabric defaults to cotton when missing.
  */
 export function clampMeasurements(m: Measurements): Measurements {
   const chest = Math.max(60, m.chest);
@@ -86,35 +117,114 @@ export function clampMeasurements(m: Measurements): Measurements {
     sleeveLength: Math.max(40, m.sleeveLength),
     shirtLength: Math.max(60, m.shirtLength),
     shoulder: Math.max(20, m.shoulder),
+    fabric: m.fabric ?? "cotton",
   };
 }
 
 /* ---------- Geometry helpers ---------- */
 
-// approximate quadratic bezier length using subdivision
-function quadLength(p0: [number, number], p1: [number, number], p2: [number, number], steps = 24) {
-  let len = 0;
-  let prev = p0;
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const x = (1 - t) * (1 - t) * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0];
-    const y = (1 - t) * (1 - t) * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1];
-    len += Math.hypot(x - prev[0], y - prev[1]);
-    prev = [x, y];
+type Pt = [number, number];
+
+const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+/**
+ * Recursive De Casteljau subdivision for the arc length of a quadratic
+ * Bézier curve. Subdivides until the control polygon's length is within
+ * `tolerance` of the chord, then estimates the segment length as the
+ * average of the two — accurate to well within a millimetre for any
+ * curve we draw at garment scale.
+ */
+export function bezierQuadLength(p0: Pt, p1: Pt, p2: Pt, tolerance = 0.01): number {
+  const chord = dist(p0, p2);
+  const polygon = dist(p0, p1) + dist(p1, p2);
+  // Flat-enough test: when the control polygon collapses to the chord,
+  // the curve is well-approximated by their average.
+  if (polygon - chord <= tolerance || polygon < 1e-9) {
+    return (polygon + chord) / 2;
   }
-  return len;
+  // De Casteljau midpoints split the curve into two sub-curves that
+  // share C1 continuity at m012.
+  const m01 = mid(p0, p1);
+  const m12 = mid(p1, p2);
+  const m012 = mid(m01, m12);
+  // Halve the tolerance so total error stays bounded across recursion.
+  return (
+    bezierQuadLength(p0, m01, m012, tolerance / 2) +
+    bezierQuadLength(m012, m12, p2, tolerance / 2)
+  );
+}
+
+/**
+ * Length of one half-piece's armhole curve, in cm.
+ *
+ * Mirrors the quadratic drawn by `buildBodyPiece`: from the shoulder end
+ * down to the underarm point, with the control pulled inward to give a
+ * scooped armhole shape.
+ */
+export function armholeCurveLength(
+  halfWidthCm: number,
+  armholeDepthCm: number,
+  shoulderHalfCm: number,
+  shoulderDropCm: number,
+): number {
+  return bezierQuadLength(
+    [shoulderHalfCm, shoulderDropCm],
+    [halfWidthCm * 0.92, armholeDepthCm * 0.45],
+    [halfWidthCm, armholeDepthCm],
+  );
+}
+
+/**
+ * Total cap length for a sleeve of width `W` and cap height `cap`,
+ * in the same units as the inputs. Matches the two quadratics drawn
+ * by `buildSleeve` exactly.
+ */
+export function sleeveCapLength(W: number, cap: number): number {
+  const left = bezierQuadLength([0, cap], [W * 0.18, cap * 0.15], [W / 2, 0]);
+  const right = bezierQuadLength([W / 2, 0], [W * 0.82, cap * 0.15], [W, cap]);
+  return left + right;
+}
+
+/**
+ * Solve for the sleeve width whose cap arc length equals `targetCm`.
+ *
+ * Cap length is monotonically increasing in W for fixed cap height, so
+ * a binary search converges quickly. Returns the width in cm.
+ */
+export function solveSleeveWidthForCap(targetCm: number, capHeightCm: number): number {
+  // Lower bound: a degenerate cap of zero width still has length ≈ 2·cap.
+  // Upper bound: enough head-room to cover any plausible target.
+  let lo = Math.max(1, capHeightCm * 0.5);
+  let hi = Math.max(targetCm, capHeightCm * 4);
+  // Push hi out until it overshoots the target (in case the initial
+  // estimate undershoots for unusual ratios).
+  for (let i = 0; i < 20 && sleeveCapLength(hi, capHeightCm) < targetCm; i++) hi *= 1.5;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (sleeveCapLength(mid, capHeightCm) < targetCm) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 /* ---------- Pattern generation ---------- */
 
 export function generatePattern(input: Measurements): PatternData {
   const m = clampMeasurements(input);
-  const ease = EASE[m.fit];
+  const fabric = FABRICS[m.fabric];
+
+  // Body adjustments for stretch fabrics.
+  // Knits hug the body: reduce ease and shorten the armhole slightly so
+  // the sleeve doesn't gape. Multipliers stay close to 1 for cotton.
+  const easeAdjust = 1 - fabric.stretch * 0.5;        // cotton≈0.975, jersey≈0.9, rib≈0.8
+  const armholeAdjust = 1 - fabric.stretch * 0.15;    // cotton≈0.9925, jersey≈0.97, rib≈0.94
+
+  const ease = EASE[m.fit] * easeAdjust;
   const halfChest = (m.chest + ease) / 2;          // cm
   const frontWidth = halfChest * 0.48;             // cm
   const backWidth = halfChest * 0.52;              // cm
-  const armholeDepth = m.chest / 4 + ARMHOLE_EXTRA[m.fit]; // cm
-  const sleeveWidth = armholeDepth * 1.8;          // cm
+  const armholeDepth = (m.chest / 4 + ARMHOLE_EXTRA[m.fit]) * armholeAdjust; // cm
   const capHeight = armholeDepth * 0.7;            // cm
 
   const neckWidth = m.neck / 5;                    // cm (half-width on fold)
@@ -124,9 +234,17 @@ export function generatePattern(input: Measurements): PatternData {
   const shoulderHalf = m.shoulder / 2;             // cm (on fold)
   const shoulderDrop = 3;                          // cm
 
-  // body taper
-  const waistHalf = (m.chest - 2 + ease) / 2 * 0.5; // half of waist on fold (matches half pieces)
-  // Use 48/52 split for waist too
+  // ---- Sleeve cap matched to actual armhole circumference ----
+  // Real-world drafting rule: cap length = armhole + small "cap ease" so
+  // the sleeve eases smoothly into the bodice. Knits get less ease (the
+  // fabric stretches into the curve); wovens need more for arm movement.
+  const armholeFrontCm = armholeCurveLength(frontWidth, armholeDepth, shoulderHalf, shoulderDrop);
+  const armholeBackCm = armholeCurveLength(backWidth, armholeDepth, shoulderHalf, shoulderDrop);
+  const armholeFullCm = armholeFrontCm + armholeBackCm;
+  const capEase = Math.max(0, 0.05 - fabric.stretch * 0.1); // cotton≈4.5%, jersey≈3%, rib≈1%
+  const sleeveWidth = solveSleeveWidthForCap(armholeFullCm * (1 + capEase), capHeight);
+
+  // body taper — keep 48/52 split for waist matching the body pieces
   const frontWaist = ((m.chest - 2 + ease) / 2) * 0.48;
   const backWaist = ((m.chest - 2 + ease) / 2) * 0.52;
 
@@ -164,21 +282,29 @@ export function generatePattern(input: Measurements): PatternData {
     capHeight,
   });
 
-  /* ---- Neckband ---- */
-  // Approximate neckline length from front + back neck curves (full circumference, both halves)
-  const frontNeckLen = quadLength(
+  /* ---- Neckband (high-precision, fabric-aware) ---- */
+  // The half-neckline curves are quadratic Béziers from the centre-front /
+  // centre-back fold to the shoulder. Compute each with recursive De
+  // Casteljau then double — both halves are mirrored on the fold.
+  const frontHalfMm = bezierQuadLength(
     [0, frontNeckDepth * MM],
     [neckWidth * MM * 0.5, 0],
-    [neckWidth * MM, 0]
-  ) * 2; // both halves (mirrored on fold)
-  const backNeckLen = quadLength(
+    [neckWidth * MM, 0],
+  );
+  const backHalfMm = bezierQuadLength(
     [0, backNeckDepth * MM],
     [neckWidth * MM * 0.5, 0],
-    [neckWidth * MM, 0]
-  ) * 2;
-  const necklineLengthMm = frontNeckLen + backNeckLen;
-  const necklineLengthCm = necklineLengthMm / MM;
-  const neckbandLengthCm = necklineLengthCm * 0.85;
+    [neckWidth * MM, 0],
+  );
+  const frontNecklineCm = (frontHalfMm * 2) / MM;
+  const backNecklineCm = (backHalfMm * 2) / MM;
+  const necklineLengthCm = frontNecklineCm + backNecklineCm;
+
+  // Smart band: shorter band → snug fit. Stretch is the primary driver,
+  // recovery scales how aggressively we can pull in (a fabric that won't
+  // snap back gets a longer, more forgiving band).
+  const effectiveStretch = fabric.stretch * fabric.recovery;
+  const neckbandLengthCm = necklineLengthCm * (1 - effectiveStretch * 0.6);
   const neckband = buildNeckband(neckbandLengthCm, 5);
 
   return {
@@ -190,8 +316,13 @@ export function generatePattern(input: Measurements): PatternData {
       armholeDepth,
       sleeveWidth,
       necklineLength: necklineLengthCm,
+      frontNecklineLength: frontNecklineCm,
+      backNecklineLength: backNecklineCm,
       neckbandLength: neckbandLengthCm,
       ease,
+      fabric: m.fabric,
+      fabricProfile: fabric,
+      effectiveStretch,
     },
     measurements: m,
   };
@@ -353,7 +484,7 @@ function buildSleeve(a: SleeveArgs): PatternPiece {
     label: "SLEEVE",
     width: bboxW,
     height: bboxH,
-    cutPath: `<g transform="translate(${saSide}, ${saArm})">${""}</g>` ? cutPath : cutPath,
+    cutPath,
     seamPath,
     grainline: { x1: cx, y1: cap + 30, x2: cx, y2: L - 40 },
     annotations: [

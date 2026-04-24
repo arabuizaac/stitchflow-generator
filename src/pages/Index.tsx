@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
-import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack } from "lucide-react";
+import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt } from "lucide-react";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -13,8 +13,10 @@ import {
   clampMeasurements,
   getLayoutBounds,
   MeasurementsSchema,
+  FABRICS,
   type Measurements,
   type FitType,
+  type FabricType,
 } from "@/lib/patternGenerator";
 import { auditPattern } from "@/lib/patternAudit";
 import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
@@ -26,9 +28,16 @@ const DEFAULTS: Measurements = {
   shirtLength: 72,
   neck: 38,
   fit: "regular",
+  fabric: "cotton",
 };
 
-const FIELDS: { key: keyof Omit<Measurements, "fit">; label: string; hint: string }[] = [
+const FABRIC_LABEL: Record<FabricType, string> = {
+  cotton: "Cotton",
+  jersey: "Jersey",
+  rib: "Rib",
+};
+
+const FIELDS: { key: keyof Omit<Measurements, "fit" | "fabric">; label: string; hint: string }[] = [
   { key: "chest", label: "Chest", hint: "Fullest part" },
   { key: "shoulder", label: "Shoulder Width", hint: "Seam to seam" },
   { key: "sleeveLength", label: "Sleeve Length", hint: "Min 40 cm" },
@@ -240,6 +249,33 @@ const Index = () => {
               </p>
             </div>
 
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Shirt className="h-3.5 w-3.5" /> Fabric
+              </Label>
+              <ToggleGroup
+                type="single"
+                value={values.fabric}
+                onValueChange={(v) => v && setValues((s) => ({ ...s, fabric: v as FabricType }))}
+                className="grid grid-cols-3 gap-2"
+                data-testid="toggle-fabric"
+              >
+                {(Object.keys(FABRICS) as FabricType[]).map((f) => (
+                  <ToggleGroupItem
+                    key={f}
+                    value={f}
+                    data-testid={`toggle-fabric-${f}`}
+                    className="border border-border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground capitalize text-xs h-9"
+                  >
+                    {FABRIC_LABEL[f]}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-[11px] text-muted-foreground">
+                Stretch: cotton 5% · jersey 20% · rib 40% — affects ease, armhole &amp; neckband
+              </p>
+            </div>
+
             <div className="space-y-4">
               {FIELDS.map((f) => (
                 <div key={f.key} className="space-y-1.5">
@@ -295,7 +331,7 @@ const Index = () => {
               <h3 className="font-semibold text-lg">Preview</h3>
               <p className="text-xs text-muted-foreground">
                 {pattern
-                  ? `Half chest ${pattern.derived.halfChest.toFixed(1)}cm · Armhole ${pattern.derived.armholeDepth.toFixed(1)}cm · Sleeve ${pattern.derived.sleeveWidth.toFixed(1)}cm · Neckband ${pattern.derived.neckbandLength.toFixed(1)}cm`
+                  ? `${FABRIC_LABEL[pattern.derived.fabric]} (${(pattern.derived.fabricProfile.stretch * 100).toFixed(0)}% stretch) · Half chest ${pattern.derived.halfChest.toFixed(1)}cm · Armhole ${pattern.derived.armholeDepth.toFixed(1)}cm · Neckline ${pattern.derived.necklineLength.toFixed(1)}cm → Band ${pattern.derived.neckbandLength.toFixed(1)}cm`
                   : "Generate a pattern to preview"}
               </p>
             </div>
