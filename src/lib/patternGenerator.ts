@@ -362,88 +362,81 @@ function buildNeckband(lengthCm: number, widthCm: number): PatternPiece {
 
 /* ---------- Layout + SVG ---------- */
 
-interface LayoutOpts {
-  maxRowWidthMm?: number; // wrap if exceeded
-  gapCm?: number;
+import { layoutPieces, MIN_SPACING_PX, PX_PER_CM, type LayoutResult } from "./layoutEngine";
+
+export interface BuildSvgOptions {
+  /** Container width in px the layout should target. Defaults to 1200. */
+  maxWidth?: number;
+  /** Spacing between pieces in px. Floored to 5 cm. */
+  spacing?: number;
+  /** Outer padding around the layout in px. */
+  padding?: number;
 }
 
-export function buildSvgString(data: PatternData, opts?: LayoutOpts): string {
-  const PAD = 60;
-  const GAP = (opts?.gapCm ?? 5) * MM;
-  const MAX_ROW = opts?.maxRowWidthMm ?? 12000; // 1200 cm default (effectively no wrap unless extreme)
+/**
+ * Render the pattern to an SVG string using the robust layout engine.
+ * Pieces are measured (true bbox) then placed in a horizontal flow with
+ * automatic wrapping; layout is validated to be overlap-free.
+ */
+export function buildSvgString(data: PatternData, opts?: BuildSvgOptions): string {
+  const layout = layoutPieces(data.pieces, {
+    maxWidth: opts?.maxWidth ?? 1200,
+    spacing: opts?.spacing ?? MIN_SPACING_PX,
+    padding: opts?.padding ?? 40,
+  });
+  return renderLayoutSvg(layout);
+}
 
-  // Layout: pack into rows respecting MAX_ROW
-  const rows: { pieces: { piece: PatternPiece; x: number }[]; width: number; height: number }[] = [];
-  let currentRow: { pieces: { piece: PatternPiece; x: number }[]; width: number; height: number } = {
-    pieces: [],
-    width: 0,
-    height: 0,
-  };
-
-  for (const piece of data.pieces) {
-    const projected = currentRow.width + (currentRow.pieces.length > 0 ? GAP : 0) + piece.width;
-    if (projected > MAX_ROW && currentRow.pieces.length > 0) {
-      rows.push(currentRow);
-      currentRow = { pieces: [], width: 0, height: 0 };
-    }
-    const x = currentRow.width + (currentRow.pieces.length > 0 ? GAP : 0);
-    currentRow.pieces.push({ piece, x });
-    currentRow.width = x + piece.width;
-    currentRow.height = Math.max(currentRow.height, piece.height);
-  }
-  if (currentRow.pieces.length > 0) rows.push(currentRow);
-
-  const totalWidth = Math.max(...rows.map((r) => r.width)) + PAD * 2;
-  const totalHeight = rows.reduce((s, r) => s + r.height, 0) + GAP * (rows.length - 1) + PAD * 2;
+/** Render a precomputed layout to an SVG string. */
+export function renderLayoutSvg(layout: LayoutResult): string {
+  const { positioned, totalWidth, totalHeight } = layout;
 
   const stroke = "#0f172a";
   const seamStroke = "#94a3b8";
   const labelFill = "#0f172a";
   const foldFill = "#3b82f6";
 
-  let rowY = PAD;
-  const piecesSvg = rows
-    .map((row) => {
-      const groupY = rowY;
-      rowY += row.height + GAP;
-      return row.pieces
-        .map(({ piece, x }) => {
-          const annotations = piece.annotations
-            .map(
-              (a) =>
-                `<text x="${a.x}" y="${a.y}" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="${
-                  a.size ?? 14
-                }" font-weight="${a.bold ? 700 : 500}" fill="${labelFill}">${a.text}</text>`
-            )
-            .join("");
+  const piecesSvg = positioned
+    .map(({ piece, bbox, x, y }) => {
+      // Translate piece-local geometry so its bbox top-left lands at (x, y).
+      const tx = x - bbox.x;
+      const ty = y - bbox.y;
 
-          const grain = piece.grainline
-            ? `
-              <g stroke="${labelFill}" stroke-width="1.5" fill="none">
-                <line x1="${piece.grainline.x1}" y1="${piece.grainline.y1}" x2="${piece.grainline.x2}" y2="${piece.grainline.y2}" />
-                <polygon points="${piece.grainline.x1 - 5},${piece.grainline.y1 + 8} ${piece.grainline.x1 + 5},${piece.grainline.y1 + 8} ${piece.grainline.x1},${piece.grainline.y1 - 2}" fill="${labelFill}" />
-                <polygon points="${piece.grainline.x2 - 5},${piece.grainline.y2 - 8} ${piece.grainline.x2 + 5},${piece.grainline.y2 - 8} ${piece.grainline.x2},${piece.grainline.y2 + 2}" fill="${labelFill}" />
-              </g>
-            `
-            : "";
-
-          const fold =
-            piece.foldEdge === "left"
-              ? `<line x1="0" y1="0" x2="0" y2="${piece.height}" stroke="${foldFill}" stroke-width="2" stroke-dasharray="8 6" />
-                 <text x="6" y="${piece.height / 2}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="${foldFill}" transform="rotate(-90, 6, ${piece.height / 2})" text-anchor="middle">FOLD</text>`
-              : "";
-
-          return `
-            <g transform="translate(${x}, ${groupY})">
-              <path d="${piece.seamPath}" fill="none" stroke="${seamStroke}" stroke-width="1.2" stroke-dasharray="6 4" />
-              <path d="${piece.cutPath}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" />
-              ${fold}
-              ${grain}
-              ${annotations}
-            </g>
-          `;
-        })
+      const annotations = piece.annotations
+        .map(
+          (a) =>
+            `<text x="${a.x}" y="${a.y}" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="${
+              a.size ?? 14
+            }" font-weight="${a.bold ? 700 : 500}" fill="${labelFill}">${a.text}</text>`,
+        )
         .join("");
+
+      const grain = piece.grainline
+        ? `
+          <g stroke="${labelFill}" stroke-width="1.5" fill="none">
+            <line x1="${piece.grainline.x1}" y1="${piece.grainline.y1}" x2="${piece.grainline.x2}" y2="${piece.grainline.y2}" />
+            <polygon points="${piece.grainline.x1 - 5},${piece.grainline.y1 + 8} ${piece.grainline.x1 + 5},${piece.grainline.y1 + 8} ${piece.grainline.x1},${piece.grainline.y1 - 2}" fill="${labelFill}" />
+            <polygon points="${piece.grainline.x2 - 5},${piece.grainline.y2 - 8} ${piece.grainline.x2 + 5},${piece.grainline.y2 - 8} ${piece.grainline.x2},${piece.grainline.y2 + 2}" fill="${labelFill}" />
+          </g>
+        `
+        : "";
+
+      const foldH = bbox.height;
+      const fold =
+        piece.foldEdge === "left"
+          ? `<line x1="0" y1="${bbox.y}" x2="0" y2="${bbox.y + foldH}" stroke="${foldFill}" stroke-width="2" stroke-dasharray="8 6" />
+             <text x="6" y="${bbox.y + foldH / 2}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" fill="${foldFill}" transform="rotate(-90, 6, ${bbox.y + foldH / 2})" text-anchor="middle">FOLD</text>`
+          : "";
+
+      return `
+        <g transform="translate(${tx}, ${ty})">
+          <path d="${piece.seamPath}" fill="none" stroke="${seamStroke}" stroke-width="1.2" stroke-dasharray="6 4" />
+          <path d="${piece.cutPath}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" />
+          ${fold}
+          ${grain}
+          ${annotations}
+        </g>
+      `;
     })
     .join("");
 
@@ -459,9 +452,19 @@ export function buildSvgString(data: PatternData, opts?: LayoutOpts): string {
   </svg>`;
 }
 
-export function getLayoutBounds(data: PatternData, gapCm = 5): { widthCm: number; heightCm: number } {
-  const gap = gapCm; // cm
-  const widthMm = data.pieces.reduce((s, p) => s + p.width, 0) + gap * MM * (data.pieces.length - 1);
-  const heightMm = Math.max(...data.pieces.map((p) => p.height));
-  return { widthCm: widthMm / MM, heightCm: heightMm / MM };
+/** Total layout footprint in cm, useful for choosing PDF page size. */
+export function getLayoutBounds(
+  data: PatternData,
+  opts?: BuildSvgOptions,
+): { widthCm: number; heightCm: number; overlapFree: boolean } {
+  const layout = layoutPieces(data.pieces, {
+    maxWidth: opts?.maxWidth ?? 1200,
+    spacing: opts?.spacing ?? MIN_SPACING_PX,
+    padding: opts?.padding ?? 40,
+  });
+  return {
+    widthCm: layout.totalWidth / PX_PER_CM,
+    heightCm: layout.totalHeight / PX_PER_CM,
+    overlapFree: layout.overlapFree,
+  };
 }

@@ -11,6 +11,7 @@ import {
   buildSvgString,
   generatePattern,
   clampMeasurements,
+  getLayoutBounds,
   type Measurements,
   type FitType,
 } from "@/lib/patternGenerator";
@@ -71,9 +72,9 @@ const Index = () => {
 
   const handleDownloadPdf = async () => {
     if (!pattern) return;
-    const totalCmWidth =
-      pattern.pieces.reduce((s, p) => s + p.width / 10, 0) + 5 * (pattern.pieces.length - 1) + 4;
-    const maxCmHeight = Math.max(...pattern.pieces.map((p) => p.height / 10)) + 4;
+    const bounds = getLayoutBounds(pattern);
+    const totalCmWidth = bounds.widthCm + 4;
+    const maxCmHeight = bounds.heightCm + 4;
 
     const orientation = totalCmWidth > maxCmHeight ? "landscape" : "portrait";
     const pdf = new jsPDF({ orientation, unit: "mm", format: "a4" });
