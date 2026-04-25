@@ -239,7 +239,7 @@ const Index = () => {
     const bounds = getLayoutBounds(pattern);
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     try {
-      const plan = await addTiledPatternToPdf(pdf, svgString, bounds.widthCm, bounds.heightCm, {
+      const plan = await addTiledPatternToPdf(pdf, printSvgString, bounds.widthCm, bounds.heightCm, {
         title: "StitchFlow – T-Shirt Pattern",
         subtitle: `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)}`,
       });
