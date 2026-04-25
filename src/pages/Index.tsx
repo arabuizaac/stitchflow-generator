@@ -57,8 +57,8 @@ const FABRIC_LABEL: Record<FabricType, string> = {
 const FIELDS: { key: keyof Omit<Measurements, "fit" | "fabric">; label: string; hint: string }[] = [
   { key: "chest", label: "Chest", hint: "Fullest part" },
   { key: "shoulder", label: "Shoulder Width", hint: "Seam to seam" },
-  { key: "sleeveLength", label: "Sleeve Length", hint: "Min 40 cm" },
-  { key: "shirtLength", label: "Shirt Length", hint: "Min 60 cm" },
+  { key: "sleeveLength", label: "Sleeve Length", hint: "Min 40 cm / 15.7 in" },
+  { key: "shirtLength", label: "Shirt Length", hint: "Min 60 cm / 23.6 in" },
   { key: "neck", label: "Neck", hint: "Around neck" },
 ];
 
