@@ -69,6 +69,12 @@ const Index = () => {
 
   const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
+  // Print-only SVG: no on-screen reference band so the rasterised image
+  // matches the geometric layout bounds 1:1 in PDF exports.
+  const printSvgString = useMemo(
+    () => (pattern ? buildSvgString(pattern, { referenceBand: false }) : ""),
+    [pattern],
+  );
   const audit = useMemo(() => (pattern ? auditPattern(pattern) : null), [pattern]);
   const tilingPlan = useMemo(() => {
     if (!pattern) return null;
