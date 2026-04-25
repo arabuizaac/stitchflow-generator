@@ -187,10 +187,10 @@ interface ChromeOpts {
 }
 
 /**
- * Draw crop marks at the four corners of the printable area, plus an
- * alignment legend (column letter, row number, neighbour pages, scale
- * reminder). Crop marks sit on the page-margin edges so users can trim
- * along them and align tiles edge-to-edge.
+ * Draw page chrome: corner crop marks, mid-edge cross alignment marks,
+ * row/column label, total grid size, scale reminder, and a 5x5 cm
+ * calibration test square so users can verify their printer didn't
+ * scale the output.
  */
 function drawTileChrome(pdf: jsPDF, o: ChromeOpts): void {
   const { pageW, pageH, margin, col, row, cols, rows, pageIndex } = o;
@@ -198,50 +198,112 @@ function drawTileChrome(pdf: jsPDF, o: ChromeOpts): void {
   pdf.setLineWidth(0.2);
   pdf.setDrawColor(20, 20, 20);
 
-  // Crop marks (┌ ┐ └ ┘) at the inner corners of the margin.
   const x1 = margin;
   const y1 = margin;
   const x2 = pageW - margin;
   const y2 = pageH - margin;
 
-  // top-left
+  // ---- Corner crop marks (L-shapes) ----
   pdf.line(x1 - tickLen, y1, x1, y1);
   pdf.line(x1, y1 - tickLen, x1, y1);
-  // top-right
   pdf.line(x2, y1, x2 + tickLen, y1);
   pdf.line(x2, y1 - tickLen, x2, y1);
-  // bottom-left
   pdf.line(x1 - tickLen, y2, x1, y2);
   pdf.line(x1, y2, x1, y2 + tickLen);
-  // bottom-right
   pdf.line(x2, y2, x2 + tickLen, y2);
   pdf.line(x2, y2, x2, y2 + tickLen);
 
-  // Mid-edge alignment ticks help line up tiles when taping.
+  // ---- Mid-edge cross alignment marks (+) on each of the 4 edges ----
+  // These sit straddling the page-margin edge so opposing pages share
+  // the same cross when butted together.
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
-  pdf.line(midX, y1 - tickLen, midX, y1);
-  pdf.line(midX, y2, midX, y2 + tickLen);
-  pdf.line(x1 - tickLen, midY, x1, midY);
-  pdf.line(x2, midY, x2 + tickLen, midY);
+  const crossArm = 4; // mm half-length of each cross arm
 
-  // Page coordinate label (e.g. "Page B2 of 6 · col 2 / 3 · row 2 / 2").
+  const drawCross = (cx: number, cy: number) => {
+    pdf.line(cx - crossArm, cy, cx + crossArm, cy);
+    pdf.line(cx, cy - crossArm, cx, cy + crossArm);
+  };
+
+  // Only draw a cross on edges that have a neighbouring page —
+  // gives users a clear "match this cross to the next sheet's cross" cue.
+  if (row > 0) drawCross(midX, y1);          // top edge
+  if (row < rows - 1) drawCross(midX, y2);   // bottom edge
+  if (col > 0) drawCross(x1, midY);          // left edge
+  if (col < cols - 1) drawCross(x2, midY);   // right edge
+
+  // ---- Page label block (bottom-left) ----
   const colLetter = String.fromCharCode(65 + col);
-  const label = `Page ${colLetter}${row + 1}  ·  ${pageIndex + 1} / ${cols * rows}  ·  col ${col + 1}/${cols}  row ${row + 1}/${rows}`;
+  pdf.setFontSize(10);
+  pdf.setTextColor(20, 20, 20);
+  pdf.text(`Row ${row + 1}, Column ${col + 1}  (${colLetter}${row + 1})`, margin, pageH - 8);
+  pdf.setFontSize(8);
+  pdf.setTextColor(80, 80, 80);
+  pdf.text(
+    `Page ${pageIndex + 1} of ${cols * rows}  ·  Grid ${cols} × ${rows}`,
+    margin,
+    pageH - 4,
+  );
+
+  // ---- Print accuracy banner (top edge) ----
   pdf.setFontSize(8);
   pdf.setTextColor(40, 40, 40);
-  pdf.text(label, margin, pageH - 4);
+  pdf.text("Print at 100% scale. Do not scale.", margin, 5);
+  pdf.setFontSize(7);
+  pdf.setTextColor(110, 110, 110);
+  pdf.text(
+    "Verify the 5 cm test square measures exactly 50 mm before cutting.",
+    margin,
+    9,
+  );
 
-  // Scale reminder along the top edge.
-  pdf.text("Print at 100% scale. Do not scale. Align using crop marks.", margin, 5);
+  // ---- 5 cm × 5 cm calibration test square (bottom-right) ----
+  drawTestSquare(pdf, pageW - margin - 50, pageH - margin - 50);
 
-  // Optional title/subtitle on the first page only.
+  // ---- Optional title/subtitle on the first page (top-right) ----
   if (pageIndex === 0 && (o.title || o.subtitle)) {
     pdf.setFontSize(6);
     pdf.setTextColor(120, 120, 120);
     if (o.title) pdf.text(o.title, pageW - margin, 5, { align: "right" });
     if (o.subtitle) pdf.text(o.subtitle, pageW - margin, 9, { align: "right" });
   }
+}
+
+/**
+ * Draw a 50 mm × 50 mm calibration square at (x, y) with mm tick marks
+ * and a "5 cm" caption. Users measure this with a ruler to confirm
+ * the printer didn't shrink the page.
+ */
+function drawTestSquare(pdf: jsPDF, x: number, y: number): void {
+  const size = 50; // mm
+
+  // Solid square outline.
+  pdf.setLineWidth(0.4);
+  pdf.setDrawColor(0, 0, 0);
+  pdf.rect(x, y, size, size);
+
+  // 1 cm tick marks along the top and left edges.
+  pdf.setLineWidth(0.2);
+  for (let i = 1; i < 5; i++) {
+    const t = i * 10;
+    pdf.line(x + t, y, x + t, y + 2);     // top ticks
+    pdf.line(x, y + t, x + 2, y + t);     // left ticks
+  }
+
+  // Centre crosshair.
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  pdf.setDrawColor(150, 150, 150);
+  pdf.line(cx - 3, cy, cx + 3, cy);
+  pdf.line(cx, cy - 3, cx, cy + 3);
+
+  // Captions.
+  pdf.setFontSize(7);
+  pdf.setTextColor(20, 20, 20);
+  pdf.text("5 cm test square", x, y - 1);
+  pdf.setFontSize(6);
+  pdf.setTextColor(110, 110, 110);
+  pdf.text("Must measure 50 mm × 50 mm", x, y + size + 3);
 }
 
 /**
