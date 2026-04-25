@@ -372,15 +372,19 @@ const Index = () => {
                       id={f.key}
                       type="number"
                       inputMode="decimal"
-                      min={1}
-                      step="0.1"
-                      value={values[f.key] || ""}
+                      min={unit === "cm" ? 1 : 0.5}
+                      step={unit === "cm" ? "0.1" : "0.05"}
+                      value={
+                        values[f.key]
+                          ? roundForUnit(fromCm(values[f.key] as number, unit), unit)
+                          : ""
+                      }
                       onChange={(e) => handleChange(f.key, e.target.value)}
                       className="pr-12"
                       required
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                      cm
+                      {unitSuffix(unit)}
                     </span>
                   </div>
                 </div>
