@@ -944,6 +944,12 @@ export interface BuildSvgOptions {
   spacing?: number;
   /** Outer padding around the layout in px. */
   padding?: number;
+  /**
+   * Render the calibration + legend reference band ABOVE the pattern.
+   * Defaults to true. Set to false for tiled PDF export so the print
+   * raster matches the geometric layout bounds exactly.
+   */
+  referenceBand?: boolean;
 }
 
 /**
@@ -957,12 +963,16 @@ export function buildSvgString(data: PatternData, opts?: BuildSvgOptions): strin
     spacing: opts?.spacing ?? MIN_SPACING_PX,
     padding: opts?.padding ?? 40,
   });
-  return renderLayoutSvg(layout);
+  return renderLayoutSvg(layout, { referenceBand: opts?.referenceBand ?? true });
 }
 
 /** Render a precomputed layout to an SVG string. */
-export function renderLayoutSvg(layout: LayoutResult): string {
+export function renderLayoutSvg(
+  layout: LayoutResult,
+  opts: { referenceBand?: boolean } = {},
+): string {
   const { positioned, totalWidth, totalHeight } = layout;
+  const showBand = opts.referenceBand ?? true;
 
   const stroke = "#0f172a";
   const seamStroke = "#94a3b8";
