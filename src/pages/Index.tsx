@@ -456,10 +456,10 @@ const Index = () => {
           {pattern && (
             <>
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <Stat label="Front (half)" value={`${pattern.derived.frontWidth.toFixed(1)} cm`} />
-                <Stat label="Back (half)" value={`${pattern.derived.backWidth.toFixed(1)} cm`} />
-                <Stat label="Armhole depth" value={`${pattern.derived.armholeDepth.toFixed(1)} cm`} />
-                <Stat label="Sleeve width" value={`${pattern.derived.sleeveWidth.toFixed(1)} cm`} />
+                <Stat label="Front (half)" value={formatLength(pattern.derived.frontWidth, unit)} />
+                <Stat label="Back (half)" value={formatLength(pattern.derived.backWidth, unit)} />
+                <Stat label="Armhole depth" value={formatLength(pattern.derived.armholeDepth, unit)} />
+                <Stat label="Sleeve width" value={formatLength(pattern.derived.sleeveWidth, unit)} />
               </div>
               <div className="mt-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
                 <span>— Cut line</span>
