@@ -250,7 +250,36 @@ const Index = () => {
           <form onSubmit={handleGenerate} className="space-y-5">
             <div>
               <h3 className="font-semibold text-lg">Measurements</h3>
-              <p className="text-xs text-muted-foreground">All values in centimeters</p>
+              <p className="text-xs text-muted-foreground">
+                All values in {unit === "cm" ? "centimeters" : "inches"} — internal math always uses cm
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Ruler className="h-3.5 w-3.5" /> Units
+              </Label>
+              <ToggleGroup
+                type="single"
+                value={unit}
+                onValueChange={(v) => v && setUnit(v as UnitSystem)}
+                className="grid grid-cols-2 gap-2"
+                data-testid="toggle-unit"
+              >
+                {(["cm", "inch"] as UnitSystem[]).map((u) => (
+                  <ToggleGroupItem
+                    key={u}
+                    value={u}
+                    data-testid={`toggle-unit-${u}`}
+                    className="border border-border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground text-xs h-9"
+                  >
+                    {u === "cm" ? "Centimeters (cm)" : "Inches (in)"}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-[11px] text-muted-foreground">
+                1 in = 2.54 cm. Switching units re-displays existing values without changing the pattern.
+              </p>
             </div>
 
             <div className="space-y-2">
