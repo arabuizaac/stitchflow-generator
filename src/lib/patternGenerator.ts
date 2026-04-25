@@ -1032,25 +1032,30 @@ export function renderLayoutSvg(
   // pattern area so they can never overlap any piece. The SVG viewBox is
   // extended upward by `bandH`, and the pattern itself stays in the
   // 0..totalHeight region (just shifted down inside the viewBox).
-  const bandH = 90; // px of vertical room for the reference band
+  // Disabled (showBand=false) for tiled PDF export so the rasterised
+  // image matches the geometric layout bounds 1:1.
+  const bandH = showBand ? 90 : 0;
   const sq = 5 * PX_PER_CM; // exactly 5 cm at 1 cm = 10 px
   const sqX = 16;
   const sqY = 18;
 
   // Calibration: subtle, hairline stroke, small caption — feels like a
   // print reference, not a UI element.
-  const calibration = `
+  const calibration = showBand
+    ? `
     <g font-family="ui-sans-serif, system-ui, sans-serif">
       <rect x="${sqX}" y="${sqY}" width="${sq}" height="${sq}"
             fill="none" stroke="#94a3b8" stroke-width="0.6" />
       <text x="${sqX}" y="${sqY - 6}" font-size="8" fill="#64748b" letter-spacing="0.3">5 cm test square</text>
       <text x="${sqX}" y="${sqY + sq + 9}" font-size="7" fill="#94a3b8">Measure after printing (must be exact)</text>
     </g>
-  `;
+  `
+    : "";
 
   // Legend block sits to the right of the calibration square, also subtle.
   const legendX = sqX + sq + 32;
-  const legend = `
+  const legend = showBand
+    ? `
     <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="9" fill="#475569">
       <line x1="${legendX}" y1="${sqY + 4}" x2="${legendX + 24}" y2="${sqY + 4}" stroke="#0f172a" stroke-width="1.4" />
       <text x="${legendX + 30}" y="${sqY + 7}">Solid = cut line</text>
@@ -1060,13 +1065,13 @@ export function renderLayoutSvg(
       <text x="${legendX + 30}" y="${sqY + 35}" fill="#3b82f6">Dashed blue = cut on fold</text>
       <text x="${legendX}" y="${sqY + 50}" fill="#64748b">Print at 100% scale — do not "fit to page"</text>
     </g>
-  `;
+  `
+    : "";
 
   // Hairline divider between the reference band and the pattern canvas.
-  const divider = `
-    <line x1="0" y1="${bandH - 1}" x2="${totalWidth}" y2="${bandH - 1}"
-          stroke="#e2e8f0" stroke-width="0.6" />
-  `;
+  const divider = showBand
+    ? `<line x1="0" y1="${bandH - 1}" x2="${totalWidth}" y2="${bandH - 1}" stroke="#e2e8f0" stroke-width="0.6" />`
+    : "";
 
   const viewH = totalHeight + bandH;
 
