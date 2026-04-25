@@ -65,6 +65,7 @@ const FIELDS: { key: keyof Omit<Measurements, "fit" | "fabric">; label: string; 
 const Index = () => {
   const [values, setValues] = useState<Measurements>(DEFAULTS);
   const [generated, setGenerated] = useState<Measurements | null>(DEFAULTS);
+  const [unit, setUnit] = useState<UnitSystem>("cm");
 
   const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
@@ -79,16 +80,25 @@ const Index = () => {
   const corrections: string[] = [];
   if (clamped.neck !== values.neck)
     corrections.push(
-      `Neck adjusted to ${clamped.neck.toFixed(1)} cm (must be ≤ chest/2; falls back to chest/3)`,
+      `Neck adjusted to ${formatLength(clamped.neck, unit)} (must be ≤ chest/2; falls back to chest/3)`,
     );
   if (clamped.sleeveLength !== values.sleeveLength)
-    corrections.push(`Sleeve raised to ${clamped.sleeveLength} cm`);
+    corrections.push(`Sleeve raised to ${formatLength(clamped.sleeveLength, unit)}`);
   if (clamped.shirtLength !== values.shirtLength)
-    corrections.push(`Shirt length raised to ${clamped.shirtLength} cm`);
+    corrections.push(`Shirt length raised to ${formatLength(clamped.shirtLength, unit)}`);
 
+  /**
+   * Input handler. The input field shows values in the user-selected unit.
+   * We convert to cm immediately so internal state is always in cm —
+   * this keeps every downstream calculation unit-agnostic.
+   */
   const handleChange = (key: keyof Omit<Measurements, "fit">, raw: string) => {
     const num = Number(raw);
-    setValues((v) => ({ ...v, [key]: isNaN(num) ? 0 : num }));
+    if (isNaN(num)) {
+      setValues((v) => ({ ...v, [key]: 0 }));
+      return;
+    }
+    setValues((v) => ({ ...v, [key]: toCm(num, unit) }));
   };
 
   const handleGenerate = (e: React.FormEvent) => {
