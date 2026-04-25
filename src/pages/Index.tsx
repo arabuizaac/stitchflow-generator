@@ -469,12 +469,40 @@ const Index = () => {
                 <Stat label="Armhole depth" value={formatLength(pattern.derived.armholeDepth, unit)} />
                 <Stat label="Sleeve width" value={formatLength(pattern.derived.sleeveWidth, unit)} />
               </div>
-              <div className="mt-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-                <span>— Cut line</span>
-                <span className="text-muted-foreground/80">- - Seam allowance</span>
-                <span className="text-primary">- - Cut on fold</span>
-                <span>↕ Grainline</span>
-                <span>Print at 100% scale</span>
+              {/* Line legend */}
+              <div className="mt-4 rounded-md border border-border bg-card p-3">
+                <div className="text-xs font-semibold mb-2">Line legend</div>
+                <div className="grid sm:grid-cols-2 gap-y-1.5 gap-x-4 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 h-0 border-t-2 border-foreground" />
+                    <span><strong className="text-foreground">Solid line</strong> = Cut line</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 h-0 border-t-2 border-dashed border-muted-foreground/70" />
+                    <span><strong className="text-foreground">Dashed line</strong> = Seam allowance</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 h-0 border-t-2 border-dashed border-primary" />
+                    <span><strong className="text-primary">Dashed blue</strong> = Cut on fold</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 text-center text-foreground font-bold">↕</span>
+                    <span><strong className="text-foreground">Arrow</strong> = Grainline (parallel to fabric)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Print & cut instructions */}
+              <div className="mt-3 rounded-md border border-border bg-secondary/40 p-3">
+                <div className="text-xs font-semibold mb-2">How to print &amp; cut</div>
+                <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal list-inside marker:text-foreground">
+                  <li><strong className="text-foreground">Print at 100% scale</strong> — disable "Fit to page" / "Shrink to fit" in the print dialog.</li>
+                  <li>Measure the <strong className="text-foreground">5 cm test square</strong> with a ruler. It must be exactly 50 mm. If not, reprint.</li>
+                  <li>Cut along the <strong className="text-foreground">solid outer lines</strong> (these include seam allowance).</li>
+                  <li>For the tiled PDF, align pages using the <strong className="text-foreground">+ marks</strong> on each edge, then tape them together.</li>
+                  <li>Place the pattern on fabric with the <strong className="text-foreground">grainline arrow</strong> parallel to the selvedge. Place fold edges on a fabric fold.</li>
+                  <li>Pin the pattern down and cut around it. Transfer notch marks before unpinning.</li>
+                </ol>
               </div>
 
               {audit && (
