@@ -231,17 +231,25 @@ const Index = () => {
       {/* Hero */}
       <section className="container py-10 md:py-14 text-center">
         <h2 className="text-3xl md:text-5xl font-bold tracking-tight max-w-2xl mx-auto leading-tight">
-          Industry-grade{" "}
           <span
             className="bg-clip-text text-transparent"
             style={{ backgroundImage: "var(--gradient-hero)" }}
           >
-            T-shirt patterns.
-          </span>
+            Print-ready T-shirt patterns
+          </span>{" "}
+          for testing.
         </h2>
         <p className="mt-4 text-muted-foreground max-w-lg mx-auto text-sm md:text-base">
           Enter your measurements, choose a fit, and generate a print-ready pattern with seam allowances.
         </p>
+        <div className="mt-5 max-w-xl mx-auto rounded-md border border-border bg-secondary/60 px-3 py-2 text-[12px] text-muted-foreground flex items-start gap-2 text-left">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>
+            <strong className="text-foreground">Test version.</strong> Minor adjustments may be
+            needed depending on your fabric, stretch and sewing method. Always sew a small
+            sample first.
+          </span>
+        </div>
       </section>
 
       {/* Form + Preview */}
