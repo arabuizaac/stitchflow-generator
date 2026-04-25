@@ -21,6 +21,7 @@ import {
 } from "@/lib/patternGenerator";
 import { auditPattern } from "@/lib/patternAudit";
 import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
+import { prepareSvgForExport, renderSvgIntoPdf, saveOrOpenPdf } from "@/lib/pdfExport";
 import {
   type UnitSystem,
   toCm,
@@ -152,35 +153,27 @@ const Index = () => {
       23,
     );
 
-    const svgBlob = new Blob([printSvgString], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(svgBlob);
+    // ---- Vector SVG → PDF (no canvas, no PNG) ----
+    // The pattern SVG uses `1 SVG unit = 1 mm` at print scale, so we
+    // size the embed area in mm and let svg2pdf preserve the aspect
+    // ratio internally via `preserveAspectRatio="xMidYMid meet"`.
+    let prepared: ReturnType<typeof prepareSvgForExport> | null = null;
     try {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      await new Promise<void>((res, rej) => {
-        img.onload = () => res();
-        img.onerror = () => rej(new Error("Failed to load SVG"));
-        img.src = url;
-      });
+      prepared = prepareSvgForExport(printSvgString);
 
-      const canvas = document.createElement("canvas");
-      const scale = 3;
-      const aspect = totalCmWidth / maxCmHeight;
+      // Fit the pattern into the page leaving room for header + footer.
+      const aspect = prepared.viewBox.w / prepared.viewBox.h;
       const drawW = pageW - 20;
-      // Reserve more vertical space for the instructions header + footer.
       const drawH = Math.min(pageH - 70, drawW / aspect);
       const finalW = drawH * aspect <= drawW ? drawH * aspect : drawW;
       const finalH = finalW / aspect;
 
-      canvas.width = finalW * scale * 4;
-      canvas.height = finalH * scale * 4;
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/png");
-
-      pdf.addImage(dataUrl, "PNG", 10, 28, finalW, finalH);
+      await renderSvgIntoPdf(prepared.svg, pdf, {
+        x: 10,
+        y: 28,
+        width: finalW,
+        height: finalH,
+      });
 
       // ---- 5 cm × 5 cm calibration square (bottom-right of page) ----
       const sqSize = 50; // mm
@@ -227,10 +220,23 @@ const Index = () => {
         10,
         pageH - 6,
       );
-      pdf.save("stitchflow-tshirt-pattern.pdf");
-      toast({ title: "Downloaded", description: "Your T-shirt pattern PDF is ready." });
+
+      const action = saveOrOpenPdf(pdf, "stitchflow-tshirt-pattern.pdf");
+      toast({
+        title: action === "downloaded" ? "Downloaded" : "Opened",
+        description:
+          action === "downloaded"
+            ? "Your T-shirt pattern PDF is ready."
+            : "PDF opened in a new tab — use Share → Save to Files.",
+      });
+    } catch (e) {
+      toast({
+        title: "Export failed",
+        description: e instanceof Error ? e.message : "Could not generate PDF.",
+        variant: "destructive",
+      });
     } finally {
-      URL.revokeObjectURL(url);
+      prepared?.dispose();
     }
   };
 
