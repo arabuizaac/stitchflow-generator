@@ -189,7 +189,7 @@ const Index = () => {
     try {
       const plan = await addTiledPatternToPdf(pdf, svgString, bounds.widthCm, bounds.heightCm, {
         title: "StitchFlow – T-Shirt Pattern",
-        subtitle: `Fit ${generated!.fit} · Chest ${generated!.chest}cm`,
+        subtitle: `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)}`,
       });
       pdf.save("stitchflow-tshirt-pattern-tiled.pdf");
       toast({
