@@ -131,7 +131,7 @@ const Index = () => {
     const pageH = pdf.internal.pageSize.getHeight();
 
     pdf.setFontSize(16);
-    pdf.text("StitchFlow – T-Shirt Pattern", 10, 12);
+    pdf.text("StitchFlow – T-Shirt Pattern (Test version)", 10, 12);
     pdf.setFontSize(9);
     pdf.text(
       `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)} · Shoulder ${formatLength(generated!.shoulder, unit)} · Sleeve ${formatLength(generated!.sleeveLength, unit)} · Length ${formatLength(generated!.shirtLength, unit)} · Neck ${formatLength(generated!.neck, unit)}`,
@@ -139,7 +139,12 @@ const Index = () => {
       18,
     );
     pdf.setFontSize(8);
-    pdf.text("Print at 100% scale. Do not scale.", 10, 23);
+    pdf.setTextColor(40, 40, 40);
+    pdf.text(
+      'Print at 100% scale. Disable "Fit to page" / "Shrink to fit". Verify the 5 cm square below measures 50 mm before cutting.',
+      10,
+      23,
+    );
 
     const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
@@ -156,7 +161,8 @@ const Index = () => {
       const scale = 3;
       const aspect = totalCmWidth / maxCmHeight;
       const drawW = pageW - 20;
-      const drawH = Math.min(pageH - 35, drawW / aspect);
+      // Reserve more vertical space for the instructions header + footer.
+      const drawH = Math.min(pageH - 70, drawW / aspect);
       const finalW = drawH * aspect <= drawW ? drawH * aspect : drawW;
       const finalH = finalW / aspect;
 
@@ -169,9 +175,49 @@ const Index = () => {
       const dataUrl = canvas.toDataURL("image/png");
 
       pdf.addImage(dataUrl, "PNG", 10, 28, finalW, finalH);
+
+      // ---- 5 cm × 5 cm calibration square (bottom-right of page) ----
+      const sqSize = 50; // mm
+      const sqX = pageW - 10 - sqSize;
+      const sqY = pageH - 28 - sqSize;
+      pdf.setLineWidth(0.4);
+      pdf.setDrawColor(0, 0, 0);
+      pdf.rect(sqX, sqY, sqSize, sqSize);
+      pdf.setLineWidth(0.2);
+      for (let i = 1; i < 5; i++) {
+        const t = i * 10;
+        pdf.line(sqX + t, sqY, sqX + t, sqY + 2);
+        pdf.line(sqX, sqY + t, sqX + 2, sqY + t);
+      }
+      pdf.setDrawColor(150, 150, 150);
+      pdf.line(sqX + sqSize / 2 - 3, sqY + sqSize / 2, sqX + sqSize / 2 + 3, sqY + sqSize / 2);
+      pdf.line(sqX + sqSize / 2, sqY + sqSize / 2 - 3, sqX + sqSize / 2, sqY + sqSize / 2 + 3);
+      pdf.setFontSize(7);
+      pdf.setTextColor(20, 20, 20);
+      pdf.text("5 cm test square", sqX, sqY - 1);
+      pdf.setFontSize(6);
+      pdf.setTextColor(110, 110, 110);
+      pdf.text("Must measure 50 mm × 50 mm", sqX, sqY + sqSize + 3);
+
+      // ---- Footer: legend + step-by-step ----
       pdf.setFontSize(8);
+      pdf.setTextColor(20, 20, 20);
       pdf.text(
-        "Solid line = cut line. Dashed line = seam allowance. Dashed blue = cut on fold.",
+        "Solid = cut line  ·  Dashed grey = seam allowance  ·  Dashed blue = cut on fold  ·  ↕ = grainline",
+        10,
+        pageH - 18,
+      );
+      pdf.setFontSize(7);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text(
+        "1) Print 100%  2) Verify 5 cm square  3) Cut on solid lines  4) Place grainline parallel to selvedge  5) Pin & cut fabric",
+        10,
+        pageH - 13,
+      );
+      pdf.setFontSize(6);
+      pdf.setTextColor(120, 120, 120);
+      pdf.text(
+        "Test version — minor adjustments may be needed depending on fabric and sewing method. Always sew a sample first.",
         10,
         pageH - 6,
       );
@@ -231,17 +277,25 @@ const Index = () => {
       {/* Hero */}
       <section className="container py-10 md:py-14 text-center">
         <h2 className="text-3xl md:text-5xl font-bold tracking-tight max-w-2xl mx-auto leading-tight">
-          Industry-grade{" "}
           <span
             className="bg-clip-text text-transparent"
             style={{ backgroundImage: "var(--gradient-hero)" }}
           >
-            T-shirt patterns.
-          </span>
+            Print-ready T-shirt patterns
+          </span>{" "}
+          for testing.
         </h2>
         <p className="mt-4 text-muted-foreground max-w-lg mx-auto text-sm md:text-base">
           Enter your measurements, choose a fit, and generate a print-ready pattern with seam allowances.
         </p>
+        <div className="mt-5 max-w-xl mx-auto rounded-md border border-border bg-secondary/60 px-3 py-2 text-[12px] text-muted-foreground flex items-start gap-2 text-left">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>
+            <strong className="text-foreground">Test version.</strong> Minor adjustments may be
+            needed depending on your fabric, stretch and sewing method. Always sew a small
+            sample first.
+          </span>
+        </div>
       </section>
 
       {/* Form + Preview */}
@@ -461,12 +515,40 @@ const Index = () => {
                 <Stat label="Armhole depth" value={formatLength(pattern.derived.armholeDepth, unit)} />
                 <Stat label="Sleeve width" value={formatLength(pattern.derived.sleeveWidth, unit)} />
               </div>
-              <div className="mt-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-                <span>— Cut line</span>
-                <span className="text-muted-foreground/80">- - Seam allowance</span>
-                <span className="text-primary">- - Cut on fold</span>
-                <span>↕ Grainline</span>
-                <span>Print at 100% scale</span>
+              {/* Line legend */}
+              <div className="mt-4 rounded-md border border-border bg-card p-3">
+                <div className="text-xs font-semibold mb-2">Line legend</div>
+                <div className="grid sm:grid-cols-2 gap-y-1.5 gap-x-4 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 h-0 border-t-2 border-foreground" />
+                    <span><strong className="text-foreground">Solid line</strong> = Cut line</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 h-0 border-t-2 border-dashed border-muted-foreground/70" />
+                    <span><strong className="text-foreground">Dashed line</strong> = Seam allowance</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 h-0 border-t-2 border-dashed border-primary" />
+                    <span><strong className="text-primary">Dashed blue</strong> = Cut on fold</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-7 text-center text-foreground font-bold">↕</span>
+                    <span><strong className="text-foreground">Arrow</strong> = Grainline (parallel to fabric)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Print & cut instructions */}
+              <div className="mt-3 rounded-md border border-border bg-secondary/40 p-3">
+                <div className="text-xs font-semibold mb-2">How to print &amp; cut</div>
+                <ol className="text-[11px] text-muted-foreground space-y-1 list-decimal list-inside marker:text-foreground">
+                  <li><strong className="text-foreground">Print at 100% scale</strong> — disable "Fit to page" / "Shrink to fit" in the print dialog.</li>
+                  <li>Measure the <strong className="text-foreground">5 cm test square</strong> with a ruler. It must be exactly 50 mm. If not, reprint.</li>
+                  <li>Cut along the <strong className="text-foreground">solid outer lines</strong> (these include seam allowance).</li>
+                  <li>For the tiled PDF, align pages using the <strong className="text-foreground">+ marks</strong> on each edge, then tape them together.</li>
+                  <li>Place the pattern on fabric with the <strong className="text-foreground">grainline arrow</strong> parallel to the selvedge. Place fold edges on a fabric fold.</li>
+                  <li>Pin the pattern down and cut around it. Transfer notch marks before unpinning.</li>
+                </ol>
               </div>
 
               {audit && (
