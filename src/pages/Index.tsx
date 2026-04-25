@@ -131,7 +131,7 @@ const Index = () => {
     const pageH = pdf.internal.pageSize.getHeight();
 
     pdf.setFontSize(16);
-    pdf.text("StitchFlow – T-Shirt Pattern", 10, 12);
+    pdf.text("StitchFlow – T-Shirt Pattern (Test version)", 10, 12);
     pdf.setFontSize(9);
     pdf.text(
       `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)} · Shoulder ${formatLength(generated!.shoulder, unit)} · Sleeve ${formatLength(generated!.sleeveLength, unit)} · Length ${formatLength(generated!.shirtLength, unit)} · Neck ${formatLength(generated!.neck, unit)}`,
@@ -139,7 +139,12 @@ const Index = () => {
       18,
     );
     pdf.setFontSize(8);
-    pdf.text("Print at 100% scale. Do not scale.", 10, 23);
+    pdf.setTextColor(40, 40, 40);
+    pdf.text(
+      'Print at 100% scale. Disable "Fit to page" / "Shrink to fit". Verify the 5 cm square below measures 50 mm before cutting.',
+      10,
+      23,
+    );
 
     const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
@@ -156,7 +161,8 @@ const Index = () => {
       const scale = 3;
       const aspect = totalCmWidth / maxCmHeight;
       const drawW = pageW - 20;
-      const drawH = Math.min(pageH - 35, drawW / aspect);
+      // Reserve more vertical space for the instructions header + footer.
+      const drawH = Math.min(pageH - 70, drawW / aspect);
       const finalW = drawH * aspect <= drawW ? drawH * aspect : drawW;
       const finalH = finalW / aspect;
 
@@ -169,9 +175,49 @@ const Index = () => {
       const dataUrl = canvas.toDataURL("image/png");
 
       pdf.addImage(dataUrl, "PNG", 10, 28, finalW, finalH);
+
+      // ---- 5 cm × 5 cm calibration square (bottom-right of page) ----
+      const sqSize = 50; // mm
+      const sqX = pageW - 10 - sqSize;
+      const sqY = pageH - 28 - sqSize;
+      pdf.setLineWidth(0.4);
+      pdf.setDrawColor(0, 0, 0);
+      pdf.rect(sqX, sqY, sqSize, sqSize);
+      pdf.setLineWidth(0.2);
+      for (let i = 1; i < 5; i++) {
+        const t = i * 10;
+        pdf.line(sqX + t, sqY, sqX + t, sqY + 2);
+        pdf.line(sqX, sqY + t, sqX + 2, sqY + t);
+      }
+      pdf.setDrawColor(150, 150, 150);
+      pdf.line(sqX + sqSize / 2 - 3, sqY + sqSize / 2, sqX + sqSize / 2 + 3, sqY + sqSize / 2);
+      pdf.line(sqX + sqSize / 2, sqY + sqSize / 2 - 3, sqX + sqSize / 2, sqY + sqSize / 2 + 3);
+      pdf.setFontSize(7);
+      pdf.setTextColor(20, 20, 20);
+      pdf.text("5 cm test square", sqX, sqY - 1);
+      pdf.setFontSize(6);
+      pdf.setTextColor(110, 110, 110);
+      pdf.text("Must measure 50 mm × 50 mm", sqX, sqY + sqSize + 3);
+
+      // ---- Footer: legend + step-by-step ----
       pdf.setFontSize(8);
+      pdf.setTextColor(20, 20, 20);
       pdf.text(
-        "Solid line = cut line. Dashed line = seam allowance. Dashed blue = cut on fold.",
+        "Solid = cut line  ·  Dashed grey = seam allowance  ·  Dashed blue = cut on fold  ·  ↕ = grainline",
+        10,
+        pageH - 18,
+      );
+      pdf.setFontSize(7);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text(
+        "1) Print 100%  2) Verify 5 cm square  3) Cut on solid lines  4) Place grainline parallel to selvedge  5) Pin & cut fabric",
+        10,
+        pageH - 13,
+      );
+      pdf.setFontSize(6);
+      pdf.setTextColor(120, 120, 120);
+      pdf.text(
+        "Test version — minor adjustments may be needed depending on fabric and sewing method. Always sew a sample first.",
         10,
         pageH - 6,
       );
