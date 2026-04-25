@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
-import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt } from "lucide-react";
+import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -21,6 +21,14 @@ import {
 } from "@/lib/patternGenerator";
 import { auditPattern } from "@/lib/patternAudit";
 import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
+import {
+  type UnitSystem,
+  toCm,
+  fromCm,
+  roundForUnit,
+  formatLength,
+  unitSuffix,
+} from "@/lib/units";
 
 const DEFAULTS: Measurements = {
   chest: 96,
