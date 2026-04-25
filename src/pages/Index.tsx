@@ -69,6 +69,12 @@ const Index = () => {
 
   const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
+  // Print-only SVG: no on-screen reference band so the rasterised image
+  // matches the geometric layout bounds 1:1 in PDF exports.
+  const printSvgString = useMemo(
+    () => (pattern ? buildSvgString(pattern, { referenceBand: false }) : ""),
+    [pattern],
+  );
   const audit = useMemo(() => (pattern ? auditPattern(pattern) : null), [pattern]);
   const tilingPlan = useMemo(() => {
     if (!pattern) return null;
@@ -146,7 +152,7 @@ const Index = () => {
       23,
     );
 
-    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const svgBlob = new Blob([printSvgString], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
     try {
       const img = new Image();
@@ -233,7 +239,7 @@ const Index = () => {
     const bounds = getLayoutBounds(pattern);
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     try {
-      const plan = await addTiledPatternToPdf(pdf, svgString, bounds.widthCm, bounds.heightCm, {
+      const plan = await addTiledPatternToPdf(pdf, printSvgString, bounds.widthCm, bounds.heightCm, {
         title: "StitchFlow – T-Shirt Pattern",
         subtitle: `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)}`,
       });

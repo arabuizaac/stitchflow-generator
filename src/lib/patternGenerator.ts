@@ -944,6 +944,12 @@ export interface BuildSvgOptions {
   spacing?: number;
   /** Outer padding around the layout in px. */
   padding?: number;
+  /**
+   * Render the calibration + legend reference band ABOVE the pattern.
+   * Defaults to true. Set to false for tiled PDF export so the print
+   * raster matches the geometric layout bounds exactly.
+   */
+  referenceBand?: boolean;
 }
 
 /**
@@ -957,12 +963,16 @@ export function buildSvgString(data: PatternData, opts?: BuildSvgOptions): strin
     spacing: opts?.spacing ?? MIN_SPACING_PX,
     padding: opts?.padding ?? 40,
   });
-  return renderLayoutSvg(layout);
+  return renderLayoutSvg(layout, { referenceBand: opts?.referenceBand ?? true });
 }
 
 /** Render a precomputed layout to an SVG string. */
-export function renderLayoutSvg(layout: LayoutResult): string {
+export function renderLayoutSvg(
+  layout: LayoutResult,
+  opts: { referenceBand?: boolean } = {},
+): string {
   const { positioned, totalWidth, totalHeight } = layout;
+  const showBand = opts.referenceBand ?? true;
 
   const stroke = "#0f172a";
   const seamStroke = "#94a3b8";
@@ -1017,47 +1027,69 @@ export function renderLayoutSvg(layout: LayoutResult): string {
     })
     .join("");
 
-  // Scale calibration: 5 cm test square placed in the top-left padding zone.
-  // 1 cm = PX_PER_CM units in the SVG, so a 50 px × 50 px box is exactly 5 cm
-  // when the SVG is rendered at 100% scale.
-  const sq = 5 * PX_PER_CM;
-  const sqX = 12;
-  const sqY = 12;
-  const calibration = `
+  // ---- Reference band (above the pattern canvas) ----
+  // The calibration square + legend live in a dedicated band ABOVE the
+  // pattern area so they can never overlap any piece. The SVG viewBox is
+  // extended upward by `bandH`, and the pattern itself stays in the
+  // 0..totalHeight region (just shifted down inside the viewBox).
+  // Disabled (showBand=false) for tiled PDF export so the rasterised
+  // image matches the geometric layout bounds 1:1.
+  const bandH = showBand ? 90 : 0;
+  const sq = 5 * PX_PER_CM; // exactly 5 cm at 1 cm = 10 px
+  const sqX = 16;
+  const sqY = 18;
+
+  // Calibration: subtle, hairline stroke, small caption — feels like a
+  // print reference, not a UI element.
+  const calibration = showBand
+    ? `
     <g font-family="ui-sans-serif, system-ui, sans-serif">
-      <rect x="${sqX}" y="${sqY}" width="${sq}" height="${sq}" fill="none" stroke="#0f172a" stroke-width="1.5" />
-      <line x1="${sqX + sq / 2 - 4}" y1="${sqY + sq / 2}" x2="${sqX + sq / 2 + 4}" y2="${sqY + sq / 2}" stroke="#94a3b8" />
-      <line x1="${sqX + sq / 2}" y1="${sqY + sq / 2 - 4}" x2="${sqX + sq / 2}" y2="${sqY + sq / 2 + 4}" stroke="#94a3b8" />
-      <text x="${sqX + sq / 2}" y="${sqY - 3}" text-anchor="middle" font-size="10" fill="#0f172a" font-weight="600">5 cm test square</text>
-      <text x="${sqX + sq / 2}" y="${sqY + sq + 12}" text-anchor="middle" font-size="9" fill="#64748b">Must measure 50 mm at 100% print</text>
+      <rect x="${sqX}" y="${sqY}" width="${sq}" height="${sq}"
+            fill="none" stroke="#94a3b8" stroke-width="0.6" />
+      <text x="${sqX}" y="${sqY - 6}" font-size="8" fill="#64748b" letter-spacing="0.3">5 cm test square</text>
+      <text x="${sqX}" y="${sqY + sq + 9}" font-size="7" fill="#94a3b8">Measure after printing (must be exact)</text>
     </g>
-  `;
+  `
+    : "";
 
-  // Legend block sits to the right of the calibration square.
-  const legendX = sqX + sq + 28;
-  const legend = `
-    <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#0f172a">
-      <line x1="${legendX}" y1="${sqY + 6}" x2="${legendX + 28}" y2="${sqY + 6}" stroke="#0f172a" stroke-width="2" />
-      <text x="${legendX + 34}" y="${sqY + 9}">Solid = cut line</text>
-      <line x1="${legendX}" y1="${sqY + 22}" x2="${legendX + 28}" y2="${sqY + 22}" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="6 4" />
-      <text x="${legendX + 34}" y="${sqY + 25}" fill="#475569">Dashed grey = seam allowance</text>
-      <line x1="${legendX}" y1="${sqY + 38}" x2="${legendX + 28}" y2="${sqY + 38}" stroke="#3b82f6" stroke-width="2" stroke-dasharray="8 6" />
-      <text x="${legendX + 34}" y="${sqY + 41}" fill="#3b82f6">Dashed blue = cut on fold</text>
-      <text x="${legendX}" y="${sqY + 56}" font-weight="600">Print at 100% scale — do not "fit to page"</text>
+  // Legend block sits to the right of the calibration square, also subtle.
+  const legendX = sqX + sq + 32;
+  const legend = showBand
+    ? `
+    <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="9" fill="#475569">
+      <line x1="${legendX}" y1="${sqY + 4}" x2="${legendX + 24}" y2="${sqY + 4}" stroke="#0f172a" stroke-width="1.4" />
+      <text x="${legendX + 30}" y="${sqY + 7}">Solid = cut line</text>
+      <line x1="${legendX}" y1="${sqY + 18}" x2="${legendX + 24}" y2="${sqY + 18}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3" />
+      <text x="${legendX + 30}" y="${sqY + 21}">Dashed grey = seam allowance</text>
+      <line x1="${legendX}" y1="${sqY + 32}" x2="${legendX + 24}" y2="${sqY + 32}" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="6 4" />
+      <text x="${legendX + 30}" y="${sqY + 35}" fill="#3b82f6">Dashed blue = cut on fold</text>
+      <text x="${legendX}" y="${sqY + 50}" fill="#64748b">Print at 100% scale — do not "fit to page"</text>
     </g>
-  `;
+  `
+    : "";
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="100%" preserveAspectRatio="xMidYMid meet">
+  // Hairline divider between the reference band and the pattern canvas.
+  const divider = showBand
+    ? `<line x1="0" y1="${bandH - 1}" x2="${totalWidth}" y2="${bandH - 1}" stroke="#e2e8f0" stroke-width="0.6" />`
+    : "";
+
+  const viewH = totalHeight + bandH;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${viewH}" width="100%" preserveAspectRatio="xMidYMid meet">
     <rect width="100%" height="100%" fill="#ffffff" />
     <defs>
       <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
         <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#e5e7eb" stroke-width="1" />
       </pattern>
     </defs>
-    <rect width="100%" height="100%" fill="url(#grid)" opacity="0.4" />
+    <!-- Grid only inside the pattern canvas, not the reference band. -->
+    <rect x="0" y="${bandH}" width="${totalWidth}" height="${totalHeight}" fill="url(#grid)" opacity="0.4" />
     ${calibration}
     ${legend}
-    ${piecesSvg}
+    ${divider}
+    <g transform="translate(0, ${bandH})">
+      ${piecesSvg}
+    </g>
   </svg>`;
 }
 
