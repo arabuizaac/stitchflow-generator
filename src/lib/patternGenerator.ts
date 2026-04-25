@@ -707,9 +707,10 @@ function buildBodyPiece(a: BodyPieceArgs): PatternPiece {
     foldEdge: "left",
     grainline: { x1: cx, y1: ah + 30, x2: cx, y2: H - 60 },
     annotations: [
-      { x: cx, y: cy - 30, text: a.label, size: 32, bold: true },
-      { x: cx, y: cy, text: `${a.halfWidth.toFixed(1)} × ${a.length} cm (half)`, size: 14 },
-      { x: cx, y: cy + 22, text: a.cutNote, size: 13 },
+      { x: cx, y: cy - 36, text: a.label, size: 34, bold: true },
+      { x: cx, y: cy - 14, text: a.cutNote.toUpperCase(), size: 16, bold: true },
+      { x: cx, y: cy + 6, text: `${a.halfWidth.toFixed(1)} × ${a.length} cm (half piece)`, size: 13 },
+      { x: cx, y: cy + 24, text: "Grainline ↕  ·  Fold edge on left", size: 12 },
     ],
     notches,
   };
@@ -858,9 +859,10 @@ function buildSleeve(a: SleeveArgs): PatternPiece {
     seamPath,
     grainline: { x1: cx, y1: cap + 30, x2: cx, y2: L - 40 },
     annotations: [
-      { x: cx, y: cy - 20, text: "SLEEVE", size: 30, bold: true },
-      { x: cx, y: cy + 5, text: `${a.sleeveWidth.toFixed(1)} × ${a.sleeveLength} cm`, size: 14 },
-      { x: cx, y: cy + 26, text: "Cut 2 (mirrored)", size: 13 },
+      { x: cx, y: cy - 26, text: "SLEEVE", size: 32, bold: true },
+      { x: cx, y: cy - 6, text: "CUT 2 (MIRRORED)", size: 16, bold: true },
+      { x: cx, y: cy + 14, text: `${a.sleeveWidth.toFixed(1)} × ${a.sleeveLength} cm`, size: 13 },
+      { x: cx, y: cy + 32, text: "Grainline ↕  ·  Match notches to body armhole", size: 12 },
     ],
     notches: sleeveNotches,
   };
@@ -885,8 +887,9 @@ function buildNeckband(lengthCm: number, widthCm: number): PatternPiece {
     cutPath,
     seamPath,
     annotations: [
-      { x: W / 2, y: H / 2 - 6, text: "NECKBAND", size: 22, bold: true },
-      { x: W / 2, y: H / 2 + 14, text: `${lengthCm.toFixed(1)} × ${widthCm} cm · Cut 1`, size: 12 },
+      { x: W / 2, y: H / 2 - 10, text: "NECKBAND", size: 22, bold: true },
+      { x: W / 2, y: H / 2 + 6, text: "CUT 1", size: 14, bold: true },
+      { x: W / 2, y: H / 2 + 22, text: `${lengthCm.toFixed(1)} × ${widthCm} cm  ·  Stretch to fit neckline`, size: 11 },
     ],
   };
 }
