@@ -1017,6 +1017,36 @@ export function renderLayoutSvg(layout: LayoutResult): string {
     })
     .join("");
 
+  // Scale calibration: 5 cm test square placed in the top-left padding zone.
+  // 1 cm = PX_PER_CM units in the SVG, so a 50 px × 50 px box is exactly 5 cm
+  // when the SVG is rendered at 100% scale.
+  const sq = 5 * PX_PER_CM;
+  const sqX = 12;
+  const sqY = 12;
+  const calibration = `
+    <g font-family="ui-sans-serif, system-ui, sans-serif">
+      <rect x="${sqX}" y="${sqY}" width="${sq}" height="${sq}" fill="none" stroke="#0f172a" stroke-width="1.5" />
+      <line x1="${sqX + sq / 2 - 4}" y1="${sqY + sq / 2}" x2="${sqX + sq / 2 + 4}" y2="${sqY + sq / 2}" stroke="#94a3b8" />
+      <line x1="${sqX + sq / 2}" y1="${sqY + sq / 2 - 4}" x2="${sqX + sq / 2}" y2="${sqY + sq / 2 + 4}" stroke="#94a3b8" />
+      <text x="${sqX + sq / 2}" y="${sqY - 3}" text-anchor="middle" font-size="10" fill="#0f172a" font-weight="600">5 cm test square</text>
+      <text x="${sqX + sq / 2}" y="${sqY + sq + 12}" text-anchor="middle" font-size="9" fill="#64748b">Must measure 50 mm at 100% print</text>
+    </g>
+  `;
+
+  // Legend block sits to the right of the calibration square.
+  const legendX = sqX + sq + 28;
+  const legend = `
+    <g font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#0f172a">
+      <line x1="${legendX}" y1="${sqY + 6}" x2="${legendX + 28}" y2="${sqY + 6}" stroke="#0f172a" stroke-width="2" />
+      <text x="${legendX + 34}" y="${sqY + 9}">Solid = cut line</text>
+      <line x1="${legendX}" y1="${sqY + 22}" x2="${legendX + 28}" y2="${sqY + 22}" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="6 4" />
+      <text x="${legendX + 34}" y="${sqY + 25}" fill="#475569">Dashed grey = seam allowance</text>
+      <line x1="${legendX}" y1="${sqY + 38}" x2="${legendX + 28}" y2="${sqY + 38}" stroke="#3b82f6" stroke-width="2" stroke-dasharray="8 6" />
+      <text x="${legendX + 34}" y="${sqY + 41}" fill="#3b82f6">Dashed blue = cut on fold</text>
+      <text x="${legendX}" y="${sqY + 56}" font-weight="600">Print at 100% scale — do not "fit to page"</text>
+    </g>
+  `;
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="100%" preserveAspectRatio="xMidYMid meet">
     <rect width="100%" height="100%" fill="#ffffff" />
     <defs>
@@ -1025,6 +1055,8 @@ export function renderLayoutSvg(layout: LayoutResult): string {
       </pattern>
     </defs>
     <rect width="100%" height="100%" fill="url(#grid)" opacity="0.4" />
+    ${calibration}
+    ${legend}
     ${piecesSvg}
   </svg>`;
 }
