@@ -89,6 +89,7 @@ describe("layoutEngine", () => {
       shirtLength: 70,
       neck: 38,
       fit: "regular",
+      fabric: "cotton",
     });
     const layout = layoutPieces(pattern.pieces, { maxWidth: 400 });
     expect(layout.overlapFree).toBe(true);
