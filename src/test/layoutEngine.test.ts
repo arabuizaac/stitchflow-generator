@@ -104,6 +104,7 @@ describe("layoutEngine", () => {
       shirtLength: 70,
       neck: 36,
       fit: "regular",
+      fabric: "cotton",
     });
     const layout = layoutPieces(pattern.pieces);
     for (const p of layout.positioned) {
