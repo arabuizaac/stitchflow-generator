@@ -152,7 +152,7 @@ const Index = () => {
       23,
     );
 
-    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const svgBlob = new Blob([printSvgString], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
     try {
       const img = new Image();
