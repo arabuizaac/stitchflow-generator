@@ -10,6 +10,7 @@
 import {
   armholeCurveLength,
   sleeveCapLength,
+  bezierQuadLength,
   type PatternData,
 } from "./patternGenerator";
 

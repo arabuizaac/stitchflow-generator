@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
-import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt } from "lucide-react";
+import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -21,6 +21,14 @@ import {
 } from "@/lib/patternGenerator";
 import { auditPattern } from "@/lib/patternAudit";
 import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
+import {
+  type UnitSystem,
+  toCm,
+  fromCm,
+  roundForUnit,
+  formatLength,
+  unitSuffix,
+} from "@/lib/units";
 
 const DEFAULTS: Measurements = {
   chest: 96,
@@ -49,14 +57,15 @@ const FABRIC_LABEL: Record<FabricType, string> = {
 const FIELDS: { key: keyof Omit<Measurements, "fit" | "fabric">; label: string; hint: string }[] = [
   { key: "chest", label: "Chest", hint: "Fullest part" },
   { key: "shoulder", label: "Shoulder Width", hint: "Seam to seam" },
-  { key: "sleeveLength", label: "Sleeve Length", hint: "Min 40 cm" },
-  { key: "shirtLength", label: "Shirt Length", hint: "Min 60 cm" },
+  { key: "sleeveLength", label: "Sleeve Length", hint: "Min 40 cm / 15.7 in" },
+  { key: "shirtLength", label: "Shirt Length", hint: "Min 60 cm / 23.6 in" },
   { key: "neck", label: "Neck", hint: "Around neck" },
 ];
 
 const Index = () => {
   const [values, setValues] = useState<Measurements>(DEFAULTS);
   const [generated, setGenerated] = useState<Measurements | null>(DEFAULTS);
+  const [unit, setUnit] = useState<UnitSystem>("cm");
 
   const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
@@ -71,16 +80,25 @@ const Index = () => {
   const corrections: string[] = [];
   if (clamped.neck !== values.neck)
     corrections.push(
-      `Neck adjusted to ${clamped.neck.toFixed(1)} cm (must be ≤ chest/2; falls back to chest/3)`,
+      `Neck adjusted to ${formatLength(clamped.neck, unit)} (must be ≤ chest/2; falls back to chest/3)`,
     );
   if (clamped.sleeveLength !== values.sleeveLength)
-    corrections.push(`Sleeve raised to ${clamped.sleeveLength} cm`);
+    corrections.push(`Sleeve raised to ${formatLength(clamped.sleeveLength, unit)}`);
   if (clamped.shirtLength !== values.shirtLength)
-    corrections.push(`Shirt length raised to ${clamped.shirtLength} cm`);
+    corrections.push(`Shirt length raised to ${formatLength(clamped.shirtLength, unit)}`);
 
+  /**
+   * Input handler. The input field shows values in the user-selected unit.
+   * We convert to cm immediately so internal state is always in cm —
+   * this keeps every downstream calculation unit-agnostic.
+   */
   const handleChange = (key: keyof Omit<Measurements, "fit">, raw: string) => {
     const num = Number(raw);
-    setValues((v) => ({ ...v, [key]: isNaN(num) ? 0 : num }));
+    if (isNaN(num)) {
+      setValues((v) => ({ ...v, [key]: 0 }));
+      return;
+    }
+    setValues((v) => ({ ...v, [key]: toCm(num, unit) }));
   };
 
   const handleGenerate = (e: React.FormEvent) => {
@@ -116,7 +134,7 @@ const Index = () => {
     pdf.text("StitchFlow – T-Shirt Pattern", 10, 12);
     pdf.setFontSize(9);
     pdf.text(
-      `Fit ${generated!.fit} · Chest ${generated!.chest}cm · Shoulder ${generated!.shoulder}cm · Sleeve ${generated!.sleeveLength}cm · Length ${generated!.shirtLength}cm · Neck ${generated!.neck}cm`,
+      `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)} · Shoulder ${formatLength(generated!.shoulder, unit)} · Sleeve ${formatLength(generated!.sleeveLength, unit)} · Length ${formatLength(generated!.shirtLength, unit)} · Neck ${formatLength(generated!.neck, unit)}`,
       10,
       18,
     );
@@ -171,7 +189,7 @@ const Index = () => {
     try {
       const plan = await addTiledPatternToPdf(pdf, svgString, bounds.widthCm, bounds.heightCm, {
         title: "StitchFlow – T-Shirt Pattern",
-        subtitle: `Fit ${generated!.fit} · Chest ${generated!.chest}cm`,
+        subtitle: `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)}`,
       });
       pdf.save("stitchflow-tshirt-pattern-tiled.pdf");
       toast({
@@ -232,7 +250,36 @@ const Index = () => {
           <form onSubmit={handleGenerate} className="space-y-5">
             <div>
               <h3 className="font-semibold text-lg">Measurements</h3>
-              <p className="text-xs text-muted-foreground">All values in centimeters</p>
+              <p className="text-xs text-muted-foreground">
+                All values in {unit === "cm" ? "centimeters" : "inches"} — internal math always uses cm
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Ruler className="h-3.5 w-3.5" /> Units
+              </Label>
+              <ToggleGroup
+                type="single"
+                value={unit}
+                onValueChange={(v) => v && setUnit(v as UnitSystem)}
+                className="grid grid-cols-2 gap-2"
+                data-testid="toggle-unit"
+              >
+                {(["cm", "inch"] as UnitSystem[]).map((u) => (
+                  <ToggleGroupItem
+                    key={u}
+                    value={u}
+                    data-testid={`toggle-unit-${u}`}
+                    className="border border-border data-[state=on]:bg-primary data-[state=on]:text-primary-foreground text-xs h-9"
+                  >
+                    {u === "cm" ? "Centimeters (cm)" : "Inches (in)"}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-[11px] text-muted-foreground">
+                1 in = 2.54 cm. Switching units re-displays existing values without changing the pattern.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -325,15 +372,19 @@ const Index = () => {
                       id={f.key}
                       type="number"
                       inputMode="decimal"
-                      min={1}
-                      step="0.1"
-                      value={values[f.key] || ""}
+                      min={unit === "cm" ? 1 : 0.5}
+                      step={unit === "cm" ? "0.1" : "0.05"}
+                      value={
+                        values[f.key]
+                          ? roundForUnit(fromCm(values[f.key] as number, unit), unit)
+                          : ""
+                      }
                       onChange={(e) => handleChange(f.key, e.target.value)}
                       className="pr-12"
                       required
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                      cm
+                      {unitSuffix(unit)}
                     </span>
                   </div>
                 </div>
@@ -366,7 +417,7 @@ const Index = () => {
               <h3 className="font-semibold text-lg">Preview</h3>
               <p className="text-xs text-muted-foreground">
                 {pattern
-                  ? `${FABRIC_LABEL[pattern.derived.fabric]} (${(pattern.derived.fabricProfile.stretch * 100).toFixed(0)}% stretch) · Half chest ${pattern.derived.halfChest.toFixed(1)}cm · Armhole ${pattern.derived.armholeDepth.toFixed(1)}cm · Neckline ${pattern.derived.necklineLength.toFixed(1)}cm → Band ${pattern.derived.neckbandLength.toFixed(1)}cm`
+                  ? `${FABRIC_LABEL[pattern.derived.fabric]} (${(pattern.derived.fabricProfile.stretch * 100).toFixed(0)}% stretch) · Half chest ${formatLength(pattern.derived.halfChest, unit)} · Armhole ${formatLength(pattern.derived.armholeDepth, unit)} · Neckline ${formatLength(pattern.derived.necklineLength, unit)} → Band ${formatLength(pattern.derived.neckbandLength, unit)}`
                   : "Generate a pattern to preview"}
               </p>
             </div>
@@ -405,10 +456,10 @@ const Index = () => {
           {pattern && (
             <>
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <Stat label="Front (half)" value={`${pattern.derived.frontWidth.toFixed(1)} cm`} />
-                <Stat label="Back (half)" value={`${pattern.derived.backWidth.toFixed(1)} cm`} />
-                <Stat label="Armhole depth" value={`${pattern.derived.armholeDepth.toFixed(1)} cm`} />
-                <Stat label="Sleeve width" value={`${pattern.derived.sleeveWidth.toFixed(1)} cm`} />
+                <Stat label="Front (half)" value={formatLength(pattern.derived.frontWidth, unit)} />
+                <Stat label="Back (half)" value={formatLength(pattern.derived.backWidth, unit)} />
+                <Stat label="Armhole depth" value={formatLength(pattern.derived.armholeDepth, unit)} />
+                <Stat label="Sleeve width" value={formatLength(pattern.derived.sleeveWidth, unit)} />
               </div>
               <div className="mt-3 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
                 <span>— Cut line</span>
