@@ -134,7 +134,7 @@ const Index = () => {
     pdf.text("StitchFlow – T-Shirt Pattern", 10, 12);
     pdf.setFontSize(9);
     pdf.text(
-      `Fit ${generated!.fit} · Chest ${generated!.chest}cm · Shoulder ${generated!.shoulder}cm · Sleeve ${generated!.sleeveLength}cm · Length ${generated!.shirtLength}cm · Neck ${generated!.neck}cm`,
+      `Fit ${generated!.fit} · Chest ${formatLength(generated!.chest, unit)} · Shoulder ${formatLength(generated!.shoulder, unit)} · Sleeve ${formatLength(generated!.sleeveLength, unit)} · Length ${formatLength(generated!.shirtLength, unit)} · Neck ${formatLength(generated!.neck, unit)}`,
       10,
       18,
     );
