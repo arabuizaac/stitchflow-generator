@@ -417,7 +417,7 @@ const Index = () => {
               <h3 className="font-semibold text-lg">Preview</h3>
               <p className="text-xs text-muted-foreground">
                 {pattern
-                  ? `${FABRIC_LABEL[pattern.derived.fabric]} (${(pattern.derived.fabricProfile.stretch * 100).toFixed(0)}% stretch) · Half chest ${pattern.derived.halfChest.toFixed(1)}cm · Armhole ${pattern.derived.armholeDepth.toFixed(1)}cm · Neckline ${pattern.derived.necklineLength.toFixed(1)}cm → Band ${pattern.derived.neckbandLength.toFixed(1)}cm`
+                  ? `${FABRIC_LABEL[pattern.derived.fabric]} (${(pattern.derived.fabricProfile.stretch * 100).toFixed(0)}% stretch) · Half chest ${formatLength(pattern.derived.halfChest, unit)} · Armhole ${formatLength(pattern.derived.armholeDepth, unit)} · Neckline ${formatLength(pattern.derived.necklineLength, unit)} → Band ${formatLength(pattern.derived.neckbandLength, unit)}`
                   : "Generate a pattern to preview"}
               </p>
             </div>
