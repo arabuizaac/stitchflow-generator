@@ -322,6 +322,16 @@ const Index = () => {
               </p>
             </div>
 
+            <TshirtMockup
+              chest={clamped.chest}
+              shirtLength={clamped.shirtLength}
+              sleeveLength={clamped.sleeveLength}
+              shoulder={clamped.shoulder}
+              neck={clamped.neck}
+              fit={values.fit}
+            />
+
+
             <div className="space-y-2">
               <Label className="text-sm font-medium flex items-center gap-1.5">
                 <Ruler className="h-3.5 w-3.5" /> Units
