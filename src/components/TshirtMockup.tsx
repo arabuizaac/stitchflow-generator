@@ -33,7 +33,6 @@ export const TshirtMockup = ({ measurements }: Props) => {
     const neckHalf = base.neckWidth;                   // cm
     const neckDepth = base.frontNeckDepth;             // cm
     const sleeveLen = base.sleeveLength;               // cm
-    const fitName = base.fit.name;
 
     // ── Anchor points in pattern space (origin: top-center) ───────
     // Y grows downward. X is centered at 0; mirror across x=0.
@@ -119,7 +118,7 @@ export const TshirtMockup = ({ measurements }: Props) => {
     const padY = (maxY - minY) * 0.05;
     const vb = `${(minX - padX).toFixed(2)} ${(minY - padY).toFixed(2)} ${(maxX - minX + padX * 2).toFixed(2)} ${(maxY - minY + padY * 2).toFixed(2)}`;
 
-    return { d: path, neckband: band, viewBox: vb, fitName };
+    return { d: path, neckband: band, viewBox: vb };
   }, [
     measurements.chest,
     measurements.neck,
