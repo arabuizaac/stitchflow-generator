@@ -322,14 +322,7 @@ const Index = () => {
               </p>
             </div>
 
-            <TshirtMockup
-              chest={clamped.chest}
-              shirtLength={clamped.shirtLength}
-              sleeveLength={clamped.sleeveLength}
-              shoulder={clamped.shoulder}
-              neck={clamped.neck}
-              fit={values.fit}
-            />
+            <TshirtMockup measurements={values} />
 
 
             <div className="space-y-2">
