@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
+import { TshirtMockup } from "@/components/TshirtMockup";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -320,6 +321,16 @@ const Index = () => {
                 All values in {unit === "cm" ? "centimeters" : "inches"} — internal math always uses cm
               </p>
             </div>
+
+            <TshirtMockup
+              chest={clamped.chest}
+              shirtLength={clamped.shirtLength}
+              sleeveLength={clamped.sleeveLength}
+              shoulder={clamped.shoulder}
+              neck={clamped.neck}
+              fit={values.fit}
+            />
+
 
             <div className="space-y-2">
               <Label className="text-sm font-medium flex items-center gap-1.5">
