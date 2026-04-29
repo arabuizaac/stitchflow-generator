@@ -398,42 +398,102 @@ export function solveSleeveWidthForCap(
   return { width, capLength, iterations, converged };
 }
 
-/* ---------- Pattern generation ---------- */
+/* ---------- Base computation (shared) ---------- */
 
-export function generatePattern(input: Measurements): PatternData {
-  // Apply size grade *first* (S/M/L/XL deltas are added to the user's
-  // base measurements), then clamp so even the smallest size stays sane.
+/**
+ * Canonical base values derived from raw measurements + fit + fabric.
+ *
+ * This is the SINGLE SOURCE OF TRUTH for any geometry that needs to
+ * reflect the pattern — including the on-screen visual mockup. Both
+ * `generatePattern` and the `<TshirtMockup>` component consume these
+ * values so the silhouette stays in lockstep with the real pattern.
+ *
+ * All values are in centimeters.
+ */
+export interface BaseValues {
+  /** Sanitised, graded measurements (cm). */
+  m: Measurements;
+  fit: FitProfile;
+  fabric: FabricProfile;
+  ease: number;
+  /** Half of the eased chest — i.e. half of the finished body width. */
+  halfChest: number;
+  frontWidth: number;
+  backWidth: number;
+  armholeDepth: number;
+  capHeight: number;
+  /** Final shirt length after the fit's length delta. */
+  shirtLength: number;
+  /** Sleeve length straight from sanitised measurements. */
+  sleeveLength: number;
+  /** Half-width of the neckline on the fold (i.e. neck opening half-width). */
+  neckWidth: number;
+  frontNeckDepth: number;
+  backNeckDepth: number;
+  /** Half of the shoulder seam — measured on the fold. */
+  shoulderHalf: number;
+  shoulderDrop: number;
+  easeAdjust: number;
+  armholeAdjust: number;
+}
+
+export function computeBase(input: Measurements): BaseValues {
   const graded = applyGrade(input);
   const m = clampMeasurements(graded);
   const fabric = FABRICS[m.fabric];
-
   const fit = FITS[m.fit];
 
-  // Body adjustments for stretch fabrics.
-  // Knits hug the body: reduce ease and shorten the armhole slightly so
-  // the sleeve doesn't gape. Multipliers stay close to 1 for cotton.
-  const easeAdjust = 1 - fabric.stretch * 0.5;        // cotton≈0.975, jersey≈0.9, rib≈0.8
-  const armholeAdjust = 1 - fabric.stretch * 0.15;    // cotton≈0.9925, jersey≈0.97, rib≈0.94
+  const easeAdjust = 1 - fabric.stretch * 0.5;
+  const armholeAdjust = 1 - fabric.stretch * 0.15;
 
-  // Fit drives ease (body width), shirt length, cap height (sleeve width)
-  // and cap ease factor — all three pattern-defining levers.
   const ease = fit.ease * easeAdjust;
-  const halfChest = (m.chest + ease) / 2;          // cm
-  const frontWidth = halfChest * 0.48;             // cm
-  const backWidth = halfChest * 0.52;              // cm
-  const armholeDepth = (m.chest / 4 + fit.armholeExtra) * armholeAdjust; // cm
-  const capHeight = armholeDepth * fit.capHeightFactor;  // cm — fit-driven
-
-  // Apply the fit's length delta and re-clamp so we never go below the
-  // minimum shirt length even on tight fits.
+  const halfChest = (m.chest + ease) / 2;
+  const frontWidth = halfChest * 0.48;
+  const backWidth = halfChest * 0.52;
+  const armholeDepth = (m.chest / 4 + fit.armholeExtra) * armholeAdjust;
+  const capHeight = armholeDepth * fit.capHeightFactor;
   const shirtLength = Math.max(60, m.shirtLength + fit.lengthDelta);
 
-  const neckWidth = m.neck / 5;                    // cm (half-width on fold)
+  const neckWidth = m.neck / 5;
   const frontNeckDepth = m.neck / 5 + 1;
   const backNeckDepth = 2.5;
 
-  const shoulderHalf = m.shoulder / 2;             // cm (on fold)
-  const shoulderDrop = 3;                          // cm
+  const shoulderHalf = m.shoulder / 2;
+  const shoulderDrop = 3;
+
+  return {
+    m,
+    fit,
+    fabric,
+    ease,
+    halfChest,
+    frontWidth,
+    backWidth,
+    armholeDepth,
+    capHeight,
+    shirtLength,
+    sleeveLength: m.sleeveLength,
+    neckWidth,
+    frontNeckDepth,
+    backNeckDepth,
+    shoulderHalf,
+    shoulderDrop,
+    easeAdjust,
+    armholeAdjust,
+  };
+}
+
+/* ---------- Pattern generation ---------- */
+
+export function generatePattern(input: Measurements): PatternData {
+  const base = computeBase(input);
+  const {
+    m, fit, fabric,
+    ease, halfChest, frontWidth, backWidth,
+    armholeDepth, capHeight, shirtLength,
+    neckWidth, frontNeckDepth, backNeckDepth,
+    shoulderHalf, shoulderDrop,
+  } = base;
 
   // ---- Sleeve cap matched to actual armhole circumference ----
   // target = armhole × (1 + capEase). The cap ease is fabric-driven
