@@ -217,8 +217,12 @@ function buildPath(p: Points): string {
     C(armholeRC1, armholeRC2, p.armpitR),
     // Right side seam to hem
     L(p.hemR),
-    // Hem
-    L(p.hemL),
+    // Hem — subtle smile (control point dips slightly below hem line)
+    C(
+      { x: p.hemR.x * 0.5, y: p.hemR.y + (p.hemR.y - p.armpitR.y) * 0.025 },
+      { x: p.hemL.x * 0.5, y: p.hemL.y + (p.hemL.y - p.armpitL.y) * 0.025 },
+      p.hemL,
+    ),
     // Left side seam up to armpit
     L(p.armpitL),
     // Left armhole
