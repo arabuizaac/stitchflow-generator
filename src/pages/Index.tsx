@@ -20,6 +20,7 @@ import {
   type SizeType,
 } from "@/lib/patternGenerator";
 import { auditPattern } from "@/lib/patternAudit";
+import { TshirtMockup } from "@/components/TshirtMockup";
 import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
 import { prepareSvgForExport, renderSvgIntoPdf, saveOrOpenPdf } from "@/lib/pdfExport";
 import {
@@ -509,6 +510,22 @@ const Index = () => {
                 <span className="hidden sm:inline">Single page</span>
               </Button>
             </div>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-border bg-gradient-to-b from-secondary/30 to-background p-4 flex flex-col items-center">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
+              Live silhouette preview
+            </div>
+            <TshirtMockup
+              measurements={{
+                chest: toCm(values.chest, unit),
+                shoulder: toCm(values.shoulder, unit),
+                sleeveLength: toCm(values.sleeveLength, unit),
+                shirtLength: toCm(values.shirtLength, unit),
+                neck: toCm(values.neck, unit),
+              }}
+              className="w-full max-w-[320px] h-auto"
+            />
           </div>
 
           <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
