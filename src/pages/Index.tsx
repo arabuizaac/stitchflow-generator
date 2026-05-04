@@ -20,6 +20,7 @@ import {
   type SizeType,
 } from "@/lib/patternGenerator";
 import { auditPattern } from "@/lib/patternAudit";
+import { TshirtMockup } from "@/components/TshirtMockup";
 import { addTiledPatternToPdf, planTiling } from "@/lib/pdfTiling";
 import { prepareSvgForExport, renderSvgIntoPdf, saveOrOpenPdf } from "@/lib/pdfExport";
 import {
