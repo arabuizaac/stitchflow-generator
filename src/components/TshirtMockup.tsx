@@ -217,8 +217,12 @@ function buildPath(p: Points): string {
     C(armholeRC1, armholeRC2, p.armpitR),
     // Right side seam to hem
     L(p.hemR),
-    // Hem
-    L(p.hemL),
+    // Hem — subtle smile (control point dips slightly below hem line)
+    C(
+      { x: p.hemR.x * 0.5, y: p.hemR.y + (p.hemR.y - p.armpitR.y) * 0.025 },
+      { x: p.hemL.x * 0.5, y: p.hemL.y + (p.hemL.y - p.armpitL.y) * 0.025 },
+      p.hemL,
+    ),
     // Left side seam up to armpit
     L(p.armpitL),
     // Left armhole
@@ -241,36 +245,68 @@ interface Props {
 }
 
 export function TshirtMockup({ measurements, className }: Props) {
-  const { path, viewBox, neckPath } = useMemo(() => {
+  const { path, viewBox, neckRib, sleeveHemL, sleeveHemR, centerGuide } = useMemo(() => {
     const base = computeBase(measurements);
     const visual = deriveVisual(base);
     const points = getPoints(visual);
     const d = buildPath(points);
-
-    // Neckline ribbing (inner curve), drawn as a separate stroke for realism.
     const f = (n: number) => n.toFixed(2);
-    const neckInnerY = points.neckBottom.y + 6;
-    const neckRib =
-      `M ${f(points.neckTopL.x)} ${f(points.neckTopL.y + 4)} ` +
-      `C ${f(points.neckTopL.x * 0.45)} ${f(neckInnerY)}, ` +
-      `${f(points.neckTopR.x * 0.45)} ${f(neckInnerY)}, ` +
-      `${f(points.neckTopR.x)} ${f(points.neckTopR.y + 4)}`;
 
-    // Compute viewBox with padding
+    // --- Inner neck rib: 85% width, 60% depth of outer neckline ---
+    const outerHalfW = Math.abs(points.neckTopR.x);
+    const outerDepth = points.neckBottom.y - points.neckTopR.y;
+    const innerHalfW = outerHalfW * 0.85;
+    const innerDepth = outerDepth * 0.6;
+    const innerTopY = points.neckTopR.y + (outerDepth * 0.04); // sit just below outer rim
+    const innerBottomY = innerTopY + innerDepth;
+    const ribL = { x: -innerHalfW, y: innerTopY };
+    const ribR = { x: innerHalfW, y: innerTopY };
+    const ribC1 = { x: -innerHalfW * 0.45, y: innerBottomY };
+    const ribC2 = { x: innerHalfW * 0.45, y: innerBottomY };
+    const neckRib =
+      `M ${f(ribL.x)} ${f(ribL.y)} C ${f(ribC1.x)} ${f(ribC1.y)}, ${f(ribC2.x)} ${f(ribC2.y)}, ${f(ribR.x)} ${f(ribR.y)}`;
+
+    // --- Subtle sleeve hem accent lines (inset from cuff edge) ---
+    const cuffInsetR = {
+      x: points.cuffOuterR.x - (points.cuffOuterR.x - points.cuffInnerR.x) * 0.18,
+      y: points.cuffOuterR.y + (points.cuffInnerR.y - points.cuffOuterR.y) * 0.18,
+    };
+    const cuffInnerInsetR = {
+      x: points.cuffInnerR.x - (points.cuffOuterR.x - points.cuffInnerR.x) * 0.18,
+      y: points.cuffInnerR.y - (points.cuffInnerR.y - points.cuffOuterR.y) * 0.18,
+    };
+    const sleeveHemR = `M ${f(cuffInsetR.x)} ${f(cuffInsetR.y)} L ${f(cuffInnerInsetR.x)} ${f(cuffInnerInsetR.y)}`;
+    const cuffInsetL = {
+      x: points.cuffOuterL.x - (points.cuffOuterL.x - points.cuffInnerL.x) * 0.18,
+      y: points.cuffOuterL.y + (points.cuffInnerL.y - points.cuffOuterL.y) * 0.18,
+    };
+    const cuffInnerInsetL = {
+      x: points.cuffInnerL.x - (points.cuffOuterL.x - points.cuffInnerL.x) * 0.18,
+      y: points.cuffInnerL.y - (points.cuffInnerL.y - points.cuffOuterL.y) * 0.18,
+    };
+    const sleeveHemL = `M ${f(cuffInsetL.x)} ${f(cuffInsetL.y)} L ${f(cuffInnerInsetL.x)} ${f(cuffInnerInsetL.y)}`;
+
+    // --- Faint vertical center guide (from inner neck bottom to hem) ---
+    const centerGuide = `M 0 ${f(innerBottomY + 4)} L 0 ${f(points.hemL.y - 4)}`;
+
+    // viewBox
     const pad = 30;
     const minX = Math.min(points.cuffOuterL.x, points.armpitL.x) - pad;
     const maxX = Math.max(points.cuffOuterR.x, points.armpitR.x) + pad;
     const minY = points.neckTopL.y - pad;
     const maxY = points.hemL.y + pad;
-    const w = maxX - minX;
-    const h = maxY - minY;
 
     return {
       path: d,
-      neckPath: neckRib,
-      viewBox: `${minX} ${minY} ${w} ${h}`,
+      neckRib,
+      sleeveHemL,
+      sleeveHemR,
+      centerGuide,
+      viewBox: `${minX} ${minY} ${maxX - minX} ${maxY - minY}`,
     };
   }, [measurements]);
+
+  const STROKE = "#2B2B2B";
 
   return (
     <svg
@@ -280,21 +316,53 @@ export function TshirtMockup({ measurements, className }: Props) {
       role="img"
       aria-label="T-shirt silhouette preview"
     >
+      {/* Faint center guide — drawn first so silhouette overlays it */}
+      <path
+        d={centerGuide}
+        fill="none"
+        stroke={STROKE}
+        strokeOpacity={0.18}
+        strokeWidth={0.8}
+        strokeDasharray="3 3"
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Main silhouette */}
       <path
         d={path}
-        fill="hsl(var(--secondary))"
-        fillOpacity={0.45}
-        stroke="hsl(var(--foreground) / 0.7)"
-        strokeWidth={2}
+        fill="#FAFAFA"
+        stroke={STROKE}
+        strokeWidth={2.1}
         strokeLinejoin="round"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
+      {/* Inner neck rib (double-line collar) */}
       <path
-        d={neckPath}
+        d={neckRib}
         fill="none"
-        stroke="hsl(var(--foreground) / 0.55)"
-        strokeWidth={1.5}
+        stroke={STROKE}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Sleeve hem accents */}
+      <path
+        d={sleeveHemL}
+        fill="none"
+        stroke={STROKE}
+        strokeOpacity={0.75}
+        strokeWidth={1.4}
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        d={sleeveHemR}
+        fill="none"
+        stroke={STROKE}
+        strokeOpacity={0.75}
+        strokeWidth={1.4}
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
