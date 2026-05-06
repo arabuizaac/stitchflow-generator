@@ -30,6 +30,7 @@ import {
   formatLength,
   unitSuffix,
 } from "@/lib/units";
+import { TshirtSilhouette } from "@/components/TshirtSilhouette";
 
 const DEFAULTS: Measurements = {
   chest: 96,
