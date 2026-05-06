@@ -83,18 +83,12 @@ function buildHalf(v: Visual): HalfPaths {
   const neckTop: Pt = { x: v.neckHalf, y: 0 };
   const shoulder: Pt = { x: v.shoulderHalf, y: v.shoulderDrop };
 
-  // Sleeve cap = highest outer point.
-  const capX = shoulder.x + v.sleeveExt * 0.55;
-  const capY = shoulder.y + v.sleeveDrop * 0.35;
-  const sleeveCap: Pt = { x: capX, y: capY };
-
   // Outer cuff corner.
   const cuffOuter: Pt = {
     x: shoulder.x + v.sleeveExt,
     y: shoulder.y + v.sleeveDrop,
   };
-  // Inner cuff corner — short, mostly-horizontal cuff edge,
-  // perpendicular-ish to the sleeve direction.
+  // Inner cuff corner — short, mostly-horizontal cuff edge.
   const cuffH = v.sleeveExt * 0.30;
   const cuffInner: Pt = {
     x: cuffOuter.x - cuffH * 0.95,
@@ -109,47 +103,54 @@ function buildHalf(v: Visual): HalfPaths {
   const hem: Pt = { x: v.width - v.taper * 0.5, y: v.height };
   const hemCenter: Pt = { x: 0, y: v.height };
 
-  // ---- Build path: starts at center-top of neck, goes around right side,
-  //      ends at center-bottom of hem. Mirror will close the loop.
   const neckCenterTop: Pt = { x: 0, y: v.neckDepth };
 
-  // Neck → shoulder (gentle slope, cubic).
-  const nsC1: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.35, y: neckTop.y + 0.5 };
-  const nsC2: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.7, y: shoulder.y - v.shoulderDrop * 0.1 };
+  /* Tangent strategy:
+   * - Mirror axis is x=0 → first control after center must be horizontal.
+   * - Shoulder is a SMOOTH point: outgoing tangent mirrors incoming tangent.
+   * - Sleeve cap is implicit — ONE cubic from shoulder → cuffOuter with the
+   *   second control raised forms a rounded dome (no peak, no triangle).
+   * - Cuff is a short straight line (allowed).
+   */
 
-  // Shoulder → sleeve cap → outer cuff: enforce HORIZONTAL tangent at the
-  // sleeve cap so the dome is smooth (no peak / no V).
-  const capTangent = (cuffOuter.x - shoulder.x) * 0.22;
-  const ssC1: Pt = { x: shoulder.x + (sleeveCap.x - shoulder.x) * 0.35, y: shoulder.y + (sleeveCap.y - shoulder.y) * 0.15 };
-  const ssC2: Pt = { x: sleeveCap.x - capTangent, y: sleeveCap.y };
+  // Neck → shoulder
+  const nsC1: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.4, y: neckTop.y + 1.0 };
+  const nsC2: Pt = { x: shoulder.x - (shoulder.x - neckTop.x) * 0.25, y: shoulder.y - v.shoulderDrop * 0.25 };
 
-  // Sleeve cap → outer cuff (smooth dome down to cuff, horizontal at cap).
-  const scC1: Pt = { x: sleeveCap.x + capTangent, y: sleeveCap.y };
-  const scC2: Pt = { x: cuffOuter.x - (cuffOuter.x - sleeveCap.x) * 0.25, y: cuffOuter.y - (cuffOuter.y - sleeveCap.y) * 0.45 };
+  // Shoulder smooth-join: outgoing tangent = mirror of (nsC2 → shoulder).
+  const shTanX = shoulder.x - nsC2.x;
+  const shTanY = shoulder.y - nsC2.y;
+  const shoulderToCuffLen = Math.hypot(cuffOuter.x - shoulder.x, cuffOuter.y - shoulder.y);
+  const tanLen = Math.hypot(shTanX, shTanY) || 1;
+  const k = (shoulderToCuffLen * 0.45) / tanLen;
+  const ssC1: Pt = { x: shoulder.x + shTanX * k, y: shoulder.y + shTanY * k };
+  // Second control: pull UP to form rounded cap top.
+  const ssC2: Pt = {
+    x: cuffOuter.x - (cuffOuter.x - shoulder.x) * 0.20,
+    y: shoulder.y + (cuffOuter.y - shoulder.y) * 0.05,
+  };
 
-  // Cuff inner → underarm (concave inward armhole).
-  const auC1: Pt = { x: cuffInner.x - (cuffInner.x - underarm.x) * 0.15, y: cuffInner.y + (underarm.y - cuffInner.y) * 0.25 };
-  const auC2: Pt = { x: cuffInner.x - (cuffInner.x - underarm.x) * 0.45, y: underarm.y - (underarm.y - cuffInner.y) * 0.10 };
+  // Cuff inner → underarm (concave armhole)
+  const auC1: Pt = { x: cuffInner.x - (cuffInner.x - underarm.x) * 0.20, y: cuffInner.y + (underarm.y - cuffInner.y) * 0.35 };
+  const auC2: Pt = { x: cuffInner.x - (cuffInner.x - underarm.x) * 0.55, y: underarm.y - (underarm.y - cuffInner.y) * 0.05 };
 
-  // Underarm → waist (gentle inward taper).
-  const uwC1: Pt = { x: underarm.x - (underarm.x - waist.x) * 0.25, y: underarm.y + (waist.y - underarm.y) * 0.35 };
-  const uwC2: Pt = { x: waist.x + (underarm.x - waist.x) * 0.15, y: waist.y - (waist.y - underarm.y) * 0.25 };
+  // Underarm → waist
+  const uwC1: Pt = { x: underarm.x - (underarm.x - waist.x) * 0.25, y: underarm.y + (waist.y - underarm.y) * 0.4 };
+  const uwC2: Pt = { x: waist.x + (underarm.x - waist.x) * 0.10, y: waist.y - (waist.y - underarm.y) * 0.25 };
 
-  // Waist → hem (slight outward flare).
+  // Waist → hem
   const whC1: Pt = { x: waist.x + (hem.x - waist.x) * 0.5, y: waist.y + (hem.y - waist.y) * 0.4 };
-  const whC2: Pt = { x: hem.x, y: hem.y - (hem.y - waist.y) * 0.2 };
+  const whC2: Pt = { x: hem.x, y: hem.y - (hem.y - waist.y) * 0.15 };
 
-  // Outer neckline control points — first control is HORIZONTAL from center
-  // so the mirrored half meets smoothly (no V at center top).
-  const neckOC1: Pt = { x: v.neckHalf * 0.35, y: v.neckDepth };
-  const neckOC2: Pt = { x: v.neckHalf * 0.85, y: v.neckDepth * 0.45 };
+  // Outer neckline (horizontal tangent at center)
+  const neckOC1: Pt = { x: v.neckHalf * 0.4, y: v.neckDepth };
+  const neckOC2: Pt = { x: v.neckHalf * 0.85, y: v.neckDepth * 0.4 };
 
   const half = [
     M(neckCenterTop),
     C(neckOC1, neckOC2, neckTop),
     C(nsC1, nsC2, shoulder),
-    C(ssC1, ssC2, sleeveCap),
-    C(scC1, scC2, cuffOuter),
+    C(ssC1, ssC2, cuffOuter),
     L(cuffInner),
     C(auC1, auC2, underarm),
     C(uwC1, uwC2, waist),
