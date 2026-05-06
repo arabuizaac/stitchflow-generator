@@ -124,12 +124,12 @@ function buildHalf(v: Visual): HalfPaths {
   const dxSC = cuffOuter.x - shoulder.x;
   const dySC = cuffOuter.y - shoulder.y;
   const ssC1: Pt = {
-    x: shoulder.x + dxSC * 0.55,
-    y: shoulder.y + dySC * 0.05, // almost horizontal from shoulder
+    x: shoulder.x + dxSC * 0.45,
+    y: shoulder.y + dySC * 0.15,
   };
   const ssC2: Pt = {
-    x: cuffOuter.x - dxSC * 0.05,
-    y: cuffOuter.y - dySC * 0.55, // pulled up near cuff → rounds the cap
+    x: cuffOuter.x - dxSC * 0.10,
+    y: shoulder.y + dySC * 0.55,
   };
 
   // Cuff inner → underarm (concave armhole)
