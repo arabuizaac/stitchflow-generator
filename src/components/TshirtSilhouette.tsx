@@ -58,7 +58,7 @@ function deriveVisual(m: SilhouetteMeasurements): Visual {
     sleeveDrop: height * 0.18,
     armholeY: height * 0.28,
     taper: width * 0.06,
-    sleeveExt: m.sleeveLength * 0.65,
+    sleeveExt: Math.min(m.sleeveLength * 0.35, m.chest * 0.18),
   };
 }
 
