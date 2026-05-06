@@ -93,11 +93,12 @@ function buildHalf(v: Visual): HalfPaths {
     x: shoulder.x + v.sleeveExt,
     y: shoulder.y + v.sleeveDrop,
   };
-  // Inner cuff corner — straight horizontal cuff.
-  const cuffH = v.sleeveExt * 0.32;
+  // Inner cuff corner — short, mostly-horizontal cuff edge,
+  // perpendicular-ish to the sleeve direction.
+  const cuffH = v.sleeveExt * 0.30;
   const cuffInner: Pt = {
-    x: cuffOuter.x - cuffH * 0.30,
-    y: cuffOuter.y - cuffH * 0.95,
+    x: cuffOuter.x - cuffH * 0.95,
+    y: cuffOuter.y - cuffH * 0.30,
   };
 
   const underarm: Pt = { x: v.width, y: v.armholeY };
