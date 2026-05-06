@@ -117,13 +117,15 @@ function buildHalf(v: Visual): HalfPaths {
   const nsC1: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.35, y: neckTop.y + 0.5 };
   const nsC2: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.7, y: shoulder.y - v.shoulderDrop * 0.1 };
 
-  // Shoulder → sleeve cap (rounded outer top of sleeve).
-  const ssC1: Pt = { x: shoulder.x + (sleeveCap.x - shoulder.x) * 0.25, y: shoulder.y - v.sleeveDrop * 0.05 };
-  const ssC2: Pt = { x: sleeveCap.x - (sleeveCap.x - shoulder.x) * 0.20, y: sleeveCap.y - v.sleeveDrop * 0.10 };
+  // Shoulder → sleeve cap → outer cuff: enforce HORIZONTAL tangent at the
+  // sleeve cap so the dome is smooth (no peak / no V).
+  const capTangent = (cuffOuter.x - shoulder.x) * 0.22;
+  const ssC1: Pt = { x: shoulder.x + (sleeveCap.x - shoulder.x) * 0.35, y: shoulder.y + (sleeveCap.y - shoulder.y) * 0.15 };
+  const ssC2: Pt = { x: sleeveCap.x - capTangent, y: sleeveCap.y };
 
-  // Sleeve cap → outer cuff (smooth dome down to cuff).
-  const scC1: Pt = { x: sleeveCap.x + (cuffOuter.x - sleeveCap.x) * 0.55, y: sleeveCap.y + (cuffOuter.y - sleeveCap.y) * 0.20 };
-  const scC2: Pt = { x: cuffOuter.x - (cuffOuter.x - sleeveCap.x) * 0.10, y: cuffOuter.y - (cuffOuter.y - sleeveCap.y) * 0.30 };
+  // Sleeve cap → outer cuff (smooth dome down to cuff, horizontal at cap).
+  const scC1: Pt = { x: sleeveCap.x + capTangent, y: sleeveCap.y };
+  const scC2: Pt = { x: cuffOuter.x - (cuffOuter.x - sleeveCap.x) * 0.25, y: cuffOuter.y - (cuffOuter.y - sleeveCap.y) * 0.45 };
 
   // Cuff inner → underarm (concave inward armhole).
   const auC1: Pt = { x: cuffInner.x - (cuffInner.x - underarm.x) * 0.15, y: cuffInner.y + (underarm.y - cuffInner.y) * 0.25 };
