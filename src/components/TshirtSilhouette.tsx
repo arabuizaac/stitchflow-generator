@@ -137,14 +137,14 @@ function buildHalf(v: Visual): HalfPaths {
   const whC1: Pt = { x: waist.x + (hem.x - waist.x) * 0.5, y: waist.y + (hem.y - waist.y) * 0.4 };
   const whC2: Pt = { x: hem.x, y: hem.y - (hem.y - waist.y) * 0.2 };
 
+  // Outer neckline control points — first control is HORIZONTAL from center
+  // so the mirrored half meets smoothly (no V at center top).
+  const neckOC1: Pt = { x: v.neckHalf * 0.35, y: v.neckDepth };
+  const neckOC2: Pt = { x: v.neckHalf * 0.85, y: v.neckDepth * 0.45 };
+
   const half = [
     M(neckCenterTop),
-    // Outer neckline center → right neck top
-    C(
-      { x: v.neckHalf * 0.35, y: v.neckDepth + v.neckDepth * 0.05 },
-      { x: v.neckHalf * 0.85, y: v.neckDepth * 0.45 },
-      neckTop,
-    ),
+    C(neckOC1, neckOC2, neckTop),
     C(nsC1, nsC2, shoulder),
     C(ssC1, ssC2, sleeveCap),
     C(scC1, scC2, cuffOuter),
@@ -157,25 +157,19 @@ function buildHalf(v: Visual): HalfPaths {
 
   // Outer neckline (separate stroke for clarity, right half).
   const neckOuterHalf = [
-    M({ x: 0, y: v.neckDepth }),
-    C(
-      { x: v.neckHalf * 0.35, y: v.neckDepth + v.neckDepth * 0.05 },
-      { x: v.neckHalf * 0.85, y: v.neckDepth * 0.45 },
-      neckTop,
-    ),
+    M(neckCenterTop),
+    C(neckOC1, neckOC2, neckTop),
   ].join(" ");
 
-  // Inner ribbed neckline (~85% width, ~60% depth, parallel curve).
+  // Inner ribbed neckline (~85% width, parallel curve below outer).
   const innerHalfW = v.neckHalf * 0.85;
-  const innerDepth = v.neckDepth * 1.55; // sits slightly below outer
+  const innerDepth = v.neckDepth * 1.5;
   const innerRight: Pt = { x: innerHalfW, y: v.neckDepth * 0.30 };
+  const innerC1: Pt = { x: innerHalfW * 0.35, y: innerDepth };
+  const innerC2: Pt = { x: innerHalfW * 0.85, y: innerDepth * 0.55 };
   const neckInnerHalf = [
     M({ x: 0, y: innerDepth }),
-    C(
-      { x: innerHalfW * 0.35, y: innerDepth + v.neckDepth * 0.05 },
-      { x: innerHalfW * 0.85, y: innerDepth * 0.55 },
-      innerRight,
-    ),
+    C(innerC1, innerC2, innerRight),
   ].join(" ");
 
   return {
