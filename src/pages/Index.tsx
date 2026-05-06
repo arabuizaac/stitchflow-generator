@@ -30,6 +30,7 @@ import {
   formatLength,
   unitSuffix,
 } from "@/lib/units";
+import { TshirtSilhouette } from "@/components/TshirtSilhouette";
 
 const DEFAULTS: Measurements = {
   chest: 96,
@@ -508,6 +509,25 @@ const Index = () => {
                 <Download className="h-4 w-4" />
                 <span className="hidden sm:inline">Single page</span>
               </Button>
+            </div>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-border bg-gradient-to-b from-secondary/30 to-background p-3">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs font-semibold">Live silhouette</div>
+              <div className="text-[10px] text-muted-foreground">Updates as you type</div>
+            </div>
+            <div className="h-48 sm:h-56 flex items-center justify-center">
+              <TshirtSilhouette
+                measurements={{
+                  chest: values.chest,
+                  shoulder: values.shoulder,
+                  sleeveLength: values.sleeveLength,
+                  shirtLength: values.shirtLength,
+                  neck: values.neck,
+                }}
+                className="h-full w-auto max-w-full"
+              />
             </div>
           </div>
 
