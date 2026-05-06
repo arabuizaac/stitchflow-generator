@@ -117,17 +117,19 @@ function buildHalf(v: Visual): HalfPaths {
   const nsC1: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.4, y: neckTop.y + 1.0 };
   const nsC2: Pt = { x: shoulder.x - (shoulder.x - neckTop.x) * 0.25, y: shoulder.y - v.shoulderDrop * 0.25 };
 
-  // Shoulder smooth-join: outgoing tangent = mirror of (nsC2 → shoulder).
+  // Shoulder smooth-join: outgoing tangent = mirror of (nsC2 → shoulder)
+  // so the shoulder has C1 continuity (no bump).
   const shTanX = shoulder.x - nsC2.x;
   const shTanY = shoulder.y - nsC2.y;
   const shoulderToCuffLen = Math.hypot(cuffOuter.x - shoulder.x, cuffOuter.y - shoulder.y);
   const tanLen = Math.hypot(shTanX, shTanY) || 1;
-  const k = (shoulderToCuffLen * 0.45) / tanLen;
+  const k = (shoulderToCuffLen * 0.40) / tanLen;
   const ssC1: Pt = { x: shoulder.x + shTanX * k, y: shoulder.y + shTanY * k };
-  // Second control: pull UP to form rounded cap top.
+  // Second control sits BELOW the cuff height so the dome is gentle and
+  // monotonically descending (no rise above shoulder).
   const ssC2: Pt = {
-    x: cuffOuter.x - (cuffOuter.x - shoulder.x) * 0.20,
-    y: shoulder.y + (cuffOuter.y - shoulder.y) * 0.05,
+    x: cuffOuter.x - (cuffOuter.x - shoulder.x) * 0.30,
+    y: cuffOuter.y - (cuffOuter.y - shoulder.y) * 0.15,
   };
 
   // Cuff inner → underarm (concave armhole)
