@@ -113,24 +113,23 @@ function buildHalf(v: Visual): HalfPaths {
    * - Cuff is a short straight line (allowed).
    */
 
-  // Neck → shoulder. End the curve with an almost-horizontal tangent so the
-  // shoulder transitions smoothly INTO the sleeve dome.
-  const nsC1: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.45, y: neckTop.y + 1.5 };
-  const nsC2: Pt = { x: shoulder.x - (shoulder.x - neckTop.x) * 0.15, y: shoulder.y + 0.2 };
+  // Neck → shoulder. Smooth gentle slope down to the shoulder point.
+  const nsC1: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.5, y: neckTop.y + 1.5 };
+  const nsC2: Pt = { x: shoulder.x - (shoulder.x - neckTop.x) * 0.10, y: shoulder.y };
 
-  // Shoulder → outer cuff: ONE cubic forming a true rounded sleeve cap.
-  // C1 sits to the right of shoulder, slightly ABOVE → curve initially goes
-  // OUT-and-up forming the cap top. C2 sits near cuff, roughly at shoulder
-  // height, so the curve descends to cuff with no peak.
+  // Shoulder → outer cuff: ONE cubic. The shoulder IS the high point; the
+  // curve descends smoothly outward to the cuff (rounded sleeve cap, no peak).
+  // Both control points sit BETWEEN shoulder.y and cuffOuter.y to guarantee
+  // a monotonic, dome-like descent (matches a fashion flat sleeve).
   const dxSC = cuffOuter.x - shoulder.x;
   const dySC = cuffOuter.y - shoulder.y;
   const ssC1: Pt = {
-    x: shoulder.x + dxSC * 0.45,
-    y: shoulder.y - dySC * 0.20, // slight rise → rounded cap top
+    x: shoulder.x + dxSC * 0.55,
+    y: shoulder.y + dySC * 0.05, // almost horizontal from shoulder
   };
   const ssC2: Pt = {
-    x: cuffOuter.x - dxSC * 0.15,
-    y: shoulder.y + dySC * 0.10,
+    x: cuffOuter.x - dxSC * 0.05,
+    y: cuffOuter.y - dySC * 0.55, // pulled up near cuff → rounds the cap
   };
 
   // Cuff inner → underarm (concave armhole)
