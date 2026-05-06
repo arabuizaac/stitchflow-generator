@@ -1,21 +1,14 @@
 /**
- * Parametric 2D T-shirt silhouette — fashion flat / tech-sketch style.
+ * Parametric 2D T-shirt silhouette — fashion flat sketch style.
  *
- * Pipeline:
- *   sanitize → computeBase → deriveVisual → buildPoints → buildPath → <svg/>
- *
- * Goal: match professional flat-sketch mockups with smooth sleeve caps,
- * defined armholes, natural shoulder slope, balanced body taper, and a
- * double-line ribbed neckline. All math is in centimetres; viewBox is
- * centred so the shirt always fits regardless of measurement extremes.
+ * Strategy: build ONE half (right side) using cubic Béziers, then mirror
+ * via an SVG <use> with scale(-1, 1) for perfect symmetry. All math is in
+ * centimetres; viewBox is centred so the shirt always fits.
  */
 
 import { useMemo } from "react";
 
-/* ------------------------------------------------------------------ */
-/* 1. Inputs                                                           */
-/* ------------------------------------------------------------------ */
-
+/* ---------- 1. Inputs ---------- */
 export interface SilhouetteMeasurements {
   chest: number;
   shoulder: number;
@@ -24,13 +17,10 @@ export interface SilhouetteMeasurements {
   neck: number;
 }
 
-/* ------------------------------------------------------------------ */
-/* 2. sanitize                                                         */
-/* ------------------------------------------------------------------ */
-
+/* ---------- 2. sanitize ---------- */
 function sanitize(m: SilhouetteMeasurements): SilhouetteMeasurements {
-  const safe = (n: number, fallback: number) =>
-    Number.isFinite(n) && n > 0 ? n : fallback;
+  const safe = (n: number, fb: number) =>
+    Number.isFinite(n) && n > 0 ? n : fb;
   return {
     chest: Math.max(40, Math.min(200, safe(m.chest, 96))),
     shoulder: Math.max(20, Math.min(80, safe(m.shoulder, 44))),
@@ -40,262 +30,163 @@ function sanitize(m: SilhouetteMeasurements): SilhouetteMeasurements {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* 3. computeBase                                                      */
-/* ------------------------------------------------------------------ */
-
-interface Base {
-  halfChest: number;
-  halfShoulder: number;
-  halfNeck: number;
-  shirtLength: number;
-  sleeveLength: number;
-}
-
-function computeBase(m: SilhouetteMeasurements): Base {
-  return {
-    halfChest: m.chest / 2,
-    halfShoulder: m.shoulder / 2,
-    halfNeck: m.neck / 2,
-    shirtLength: m.shirtLength,
-    sleeveLength: m.sleeveLength,
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* 4. deriveVisual — proportional drawing values                       */
-/* ------------------------------------------------------------------ */
-
+/* ---------- 3-4. derived visuals ---------- */
 interface Visual {
-  width: number;          // halfChest, mirrored
-  height: number;         // shirt length
+  width: number;
+  height: number;
   shoulderHalf: number;
   neckHalf: number;
   neckDepth: number;
-  shoulderDrop: number;   // 5% of height
-  sleeveDrop: number;     // 18% of height (cuff vertical drop from shoulder)
-  armholeDepth: number;   // 28% of height (underarm Y)
-  taper: number;          // 6% of width (waist inset)
-  sleeveVisual: number;   // sleeveLength * 0.65 (horizontal extent factor)
+  shoulderDrop: number;
+  sleeveDrop: number;
+  armholeY: number;
+  taper: number;
+  sleeveExt: number; // horizontal extent of sleeve from shoulder
 }
 
-function deriveVisual(b: Base): Visual {
-  const width = b.halfChest;
-  const height = b.shirtLength;
-  const neckHalf = Math.max(5, b.halfNeck / Math.PI + 1);
+function deriveVisual(m: SilhouetteMeasurements): Visual {
+  const width = m.chest / 2;
+  const height = m.shirtLength;
+  const neckHalf = Math.max(5, m.neck / (2 * Math.PI) + 2);
   return {
     width,
     height,
-    shoulderHalf: Math.min(b.halfShoulder, width - 1),
+    shoulderHalf: Math.min(m.shoulder / 2, width - 1),
     neckHalf,
-    neckDepth: neckHalf * 0.55,
+    neckDepth: neckHalf * 0.5,
     shoulderDrop: height * 0.05,
     sleeveDrop: height * 0.18,
-    armholeDepth: height * 0.28,
+    armholeY: height * 0.28,
     taper: width * 0.06,
-    sleeveVisual: b.sleeveLength * 0.65,
+    sleeveExt: Math.min(m.sleeveLength * 0.18, m.chest * 0.10),
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* 5. buildPoints — ordered anchor points (right side; mirror for left) */
-/* ------------------------------------------------------------------ */
-
+/* ---------- 5. build half-path (right side) ---------- */
 interface Pt { x: number; y: number; }
-
-interface Points {
-  neckRight: Pt;
-  neckLeft: Pt;
-  neckBottom: Pt;
-  shoulderR: Pt;
-  shoulderL: Pt;
-  sleeveCapR: Pt;     // highest outer sleeve point
-  sleeveCapL: Pt;
-  sleeveEndR: Pt;     // outer cuff corner
-  sleeveEndL: Pt;
-  sleeveInnerR: Pt;   // inner cuff corner (under sleeve)
-  sleeveInnerL: Pt;
-  underarmR: Pt;
-  underarmL: Pt;
-  waistR: Pt;
-  waistL: Pt;
-  hemR: Pt;
-  hemL: Pt;
-}
-
-function buildPoints(v: Visual): Points {
-  // Centre x = 0, top y = 0, hem y = +height.
-  const neckRight: Pt = { x: v.neckHalf, y: 0 };
-  const neckLeft: Pt = { x: -v.neckHalf, y: 0 };
-  const neckBottom: Pt = { x: 0, y: v.neckDepth };
-
-  const shoulderR: Pt = { x: v.shoulderHalf, y: v.shoulderDrop };
-  const shoulderL: Pt = { x: -v.shoulderHalf, y: v.shoulderDrop };
-
-  // Sleeve cap = highest outer point of sleeve, slightly out & down from shoulder.
-  const sleeveCapR: Pt = {
-    x: shoulderR.x + v.sleeveVisual * 0.55,
-    y: shoulderR.y + v.sleeveDrop * 0.35,
-  };
-  const sleeveCapL: Pt = { x: -sleeveCapR.x, y: sleeveCapR.y };
-
-  // Sleeve end (outer cuff) — further out and down.
-  const sleeveEndR: Pt = {
-    x: shoulderR.x + v.sleeveVisual,
-    y: shoulderR.y + v.sleeveDrop,
-  };
-  const sleeveEndL: Pt = { x: -sleeveEndR.x, y: sleeveEndR.y };
-
-  // Inner cuff (under sleeve) — straight cuff edge, slightly above & inward.
-  const cuffHeight = v.sleeveVisual * 0.32;
-  const sleeveInnerR: Pt = {
-    x: sleeveEndR.x - cuffHeight * 0.35,
-    y: sleeveEndR.y - cuffHeight,
-  };
-  const sleeveInnerL: Pt = { x: -sleeveInnerR.x, y: sleeveInnerR.y };
-
-  const underarmR: Pt = { x: v.width, y: v.armholeDepth };
-  const underarmL: Pt = { x: -v.width, y: v.armholeDepth };
-
-  // Waist — slight inward taper, ~60% down the body.
-  const waistY = v.armholeDepth + (v.height - v.armholeDepth) * 0.55;
-  const waistR: Pt = { x: v.width - v.taper, y: waistY };
-  const waistL: Pt = { x: -waistR.x, y: waistY };
-
-  // Hem — straight, slightly wider than waist for natural drape.
-  const hemR: Pt = { x: v.width - v.taper * 0.4, y: v.height };
-  const hemL: Pt = { x: -hemR.x, y: v.height };
-
-  return {
-    neckRight, neckLeft, neckBottom,
-    shoulderR, shoulderL,
-    sleeveCapR, sleeveCapL,
-    sleeveEndR, sleeveEndL,
-    sleeveInnerR, sleeveInnerL,
-    underarmR, underarmL,
-    waistR, waistL,
-    hemR, hemL,
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* 6. buildPath                                                        */
-/* ------------------------------------------------------------------ */
-
 const f = (n: number) => n.toFixed(2);
 const M = (p: Pt) => `M ${f(p.x)} ${f(p.y)}`;
 const L = (p: Pt) => `L ${f(p.x)} ${f(p.y)}`;
-const Q = (c: Pt, p: Pt) => `Q ${f(c.x)} ${f(c.y)} ${f(p.x)} ${f(p.y)}`;
-const mid = (a: Pt, b: Pt, dx = 0, dy = 0): Pt => ({
-  x: (a.x + b.x) / 2 + dx,
-  y: (a.y + b.y) / 2 + dy,
-});
+const C = (c1: Pt, c2: Pt, p: Pt) =>
+  `C ${f(c1.x)} ${f(c1.y)} ${f(c2.x)} ${f(c2.y)} ${f(p.x)} ${f(p.y)}`;
 
-function buildPath(p: Points, v: Visual): {
-  body: string;
-  neckOuter: string;
-  neckInner: string;
-} {
-  // Trace clockwise from right neck edge.
-  const body = [
-    M(p.neckRight),
-
-    // Neck → shoulder: gentle shoulder slope (control pulled slightly up).
-    Q(mid(p.neckRight, p.shoulderR, 0, -v.shoulderDrop * 0.2), p.shoulderR),
-
-    // Shoulder → sleeve cap: rounded dome top of sleeve.
-    Q(
-      { x: p.shoulderR.x + (p.sleeveCapR.x - p.shoulderR.x) * 0.45,
-        y: p.shoulderR.y - v.sleeveDrop * 0.15 },
-      p.sleeveCapR,
-    ),
-
-    // Sleeve cap → sleeve end: smooth outer sleeve curve.
-    Q(
-      { x: p.sleeveCapR.x + (p.sleeveEndR.x - p.sleeveCapR.x) * 0.6,
-        y: p.sleeveCapR.y + (p.sleeveEndR.y - p.sleeveCapR.y) * 0.35 },
-      p.sleeveEndR,
-    ),
-
-    // Cuff: straight edge across sleeve opening.
-    L(p.sleeveInnerR),
-
-    // Inner sleeve → underarm: inward armhole curve (concave).
-    Q(
-      { x: p.sleeveInnerR.x - (p.sleeveInnerR.x - p.underarmR.x) * 0.25,
-        y: p.underarmR.y - (p.underarmR.y - p.sleeveInnerR.y) * 0.15 },
-      p.underarmR,
-    ),
-
-    // Underarm → waist: slight inward taper.
-    Q(
-      { x: p.underarmR.x - (p.underarmR.x - p.waistR.x) * 0.2,
-        y: (p.underarmR.y + p.waistR.y) / 2 },
-      p.waistR,
-    ),
-
-    // Waist → hem: gentle outward flare.
-    Q(
-      { x: p.waistR.x + (p.hemR.x - p.waistR.x) * 0.4,
-        y: (p.waistR.y + p.hemR.y) / 2 },
-      p.hemR,
-    ),
-
-    // Hem: straight across.
-    L(p.hemL),
-
-    // Mirror up the left side.
-    Q(
-      { x: p.waistL.x + (p.hemL.x - p.waistL.x) * 0.4,
-        y: (p.waistL.y + p.hemL.y) / 2 },
-      p.waistL,
-    ),
-    Q(
-      { x: p.underarmL.x - (p.underarmL.x - p.waistL.x) * 0.2,
-        y: (p.underarmL.y + p.waistL.y) / 2 },
-      p.underarmL,
-    ),
-    Q(
-      { x: p.sleeveInnerL.x - (p.sleeveInnerL.x - p.underarmL.x) * 0.25,
-        y: p.underarmL.y - (p.underarmL.y - p.sleeveInnerL.y) * 0.15 },
-      p.sleeveInnerL,
-    ),
-    L(p.sleeveEndL),
-    Q(
-      { x: p.sleeveCapL.x + (p.sleeveEndL.x - p.sleeveCapL.x) * 0.6,
-        y: p.sleeveCapL.y + (p.sleeveEndL.y - p.sleeveCapL.y) * 0.35 },
-      p.sleeveCapL,
-    ),
-    Q(
-      { x: p.shoulderL.x + (p.sleeveCapL.x - p.shoulderL.x) * 0.45,
-        y: p.shoulderL.y - v.sleeveDrop * 0.15 },
-      p.shoulderL,
-    ),
-    Q(mid(p.neckLeft, p.shoulderL, 0, -v.shoulderDrop * 0.2), p.neckLeft),
-
-    // Outer neckline (closes the path).
-    Q(p.neckBottom, p.neckRight),
-    "Z",
-  ].join(" ");
-
-  // Outer neckline as its own stroke (overlays body).
-  const neckOuter = [M(p.neckLeft), Q(p.neckBottom, p.neckRight)].join(" ");
-
-  // Inner ribbed neckline: ~85% width, ~60% depth — sits below outer neck.
-  const innerHalf = v.neckHalf * 0.85;
-  const innerDepth = v.neckDepth * 0.6 + v.neckDepth * 0.4; // shifted down
-  const innerLeft: Pt = { x: -innerHalf, y: v.neckDepth * 0.2 };
-  const innerRight: Pt = { x: innerHalf, y: v.neckDepth * 0.2 };
-  const innerBottom: Pt = { x: 0, y: innerDepth };
-  const neckInner = [M(innerLeft), Q(innerBottom, innerRight)].join(" ");
-
-  return { body, neckOuter, neckInner };
+interface HalfPaths {
+  half: string;
+  neckOuterHalf: string;
+  neckInnerHalf: string;
+  centerTopY: number;
+  centerBottomY: number;
 }
 
-/* ------------------------------------------------------------------ */
-/* 7. React component                                                  */
-/* ------------------------------------------------------------------ */
+function buildHalf(v: Visual): HalfPaths {
+  // Anchor points (right side).
+  const neckTop: Pt = { x: v.neckHalf, y: 0 };
+  const shoulder: Pt = { x: v.shoulderHalf, y: v.shoulderDrop };
 
+  // Outer cuff corner.
+  const cuffOuter: Pt = {
+    x: shoulder.x + v.sleeveExt,
+    y: shoulder.y + v.sleeveDrop,
+  };
+  // Inner cuff corner — short, mostly-horizontal cuff edge.
+  const cuffH = v.sleeveExt * 0.30;
+  const cuffInner: Pt = {
+    x: cuffOuter.x - cuffH * 0.95,
+    y: cuffOuter.y - cuffH * 0.30,
+  };
+
+  const underarm: Pt = { x: v.width, y: v.armholeY };
+
+  const waistY = v.armholeY + (v.height - v.armholeY) * 0.55;
+  const waist: Pt = { x: v.width - v.taper, y: waistY };
+
+  const hem: Pt = { x: v.width - v.taper * 0.5, y: v.height };
+  const hemCenter: Pt = { x: 0, y: v.height };
+
+  const neckCenterTop: Pt = { x: 0, y: v.neckDepth };
+
+  /* Tangent strategy:
+   * - Mirror axis is x=0 → first control after center must be horizontal.
+   * - Shoulder is a SMOOTH point: outgoing tangent mirrors incoming tangent.
+   * - Sleeve cap is implicit — ONE cubic from shoulder → cuffOuter with the
+   *   second control raised forms a rounded dome (no peak, no triangle).
+   * - Cuff is a short straight line (allowed).
+   */
+
+  // Neck → shoulder. Smooth gentle slope down to the shoulder point.
+  const nsC1: Pt = { x: neckTop.x + (shoulder.x - neckTop.x) * 0.5, y: neckTop.y + 1.5 };
+  const nsC2: Pt = { x: shoulder.x - (shoulder.x - neckTop.x) * 0.10, y: shoulder.y };
+
+  // Shoulder → outer cuff: ONE cubic. The shoulder IS the high point; the
+  // curve descends smoothly outward to the cuff (rounded sleeve cap, no peak).
+  // Both control points sit BETWEEN shoulder.y and cuffOuter.y to guarantee
+  // a monotonic, dome-like descent (matches a fashion flat sleeve).
+  const dxSC = cuffOuter.x - shoulder.x;
+  const dySC = cuffOuter.y - shoulder.y;
+  const ssC1: Pt = {
+    x: shoulder.x + dxSC * 0.45,
+    y: shoulder.y + dySC * 0.15,
+  };
+  const ssC2: Pt = {
+    x: cuffOuter.x - dxSC * 0.10,
+    y: shoulder.y + dySC * 0.55,
+  };
+
+  // Cuff inner → underarm (concave armhole)
+  const auC1: Pt = { x: cuffInner.x - (cuffInner.x - underarm.x) * 0.20, y: cuffInner.y + (underarm.y - cuffInner.y) * 0.35 };
+  const auC2: Pt = { x: cuffInner.x - (cuffInner.x - underarm.x) * 0.55, y: underarm.y - (underarm.y - cuffInner.y) * 0.05 };
+
+  // Underarm → waist
+  const uwC1: Pt = { x: underarm.x - (underarm.x - waist.x) * 0.25, y: underarm.y + (waist.y - underarm.y) * 0.4 };
+  const uwC2: Pt = { x: waist.x + (underarm.x - waist.x) * 0.10, y: waist.y - (waist.y - underarm.y) * 0.25 };
+
+  // Waist → hem
+  const whC1: Pt = { x: waist.x + (hem.x - waist.x) * 0.5, y: waist.y + (hem.y - waist.y) * 0.4 };
+  const whC2: Pt = { x: hem.x, y: hem.y - (hem.y - waist.y) * 0.15 };
+
+  // Outer neckline (horizontal tangent at center)
+  const neckOC1: Pt = { x: v.neckHalf * 0.4, y: v.neckDepth };
+  const neckOC2: Pt = { x: v.neckHalf * 0.85, y: v.neckDepth * 0.4 };
+
+  const half = [
+    M(neckCenterTop),
+    C(neckOC1, neckOC2, neckTop),
+    C(nsC1, nsC2, shoulder),
+    C(ssC1, ssC2, cuffOuter),
+    L(cuffInner),
+    C(auC1, auC2, underarm),
+    C(uwC1, uwC2, waist),
+    C(whC1, whC2, hem),
+    L(hemCenter),
+  ].join(" ");
+
+  // Outer neckline (separate stroke for clarity, right half).
+  const neckOuterHalf = [
+    M(neckCenterTop),
+    C(neckOC1, neckOC2, neckTop),
+  ].join(" ");
+
+  // Inner ribbed neckline (~85% width, parallel curve below outer).
+  const innerHalfW = v.neckHalf * 0.85;
+  const innerDepth = v.neckDepth * 1.5;
+  const innerRight: Pt = { x: innerHalfW, y: v.neckDepth * 0.30 };
+  const innerC1: Pt = { x: innerHalfW * 0.35, y: innerDepth };
+  const innerC2: Pt = { x: innerHalfW * 0.85, y: innerDepth * 0.55 };
+  const neckInnerHalf = [
+    M({ x: 0, y: innerDepth }),
+    C(innerC1, innerC2, innerRight),
+  ].join(" ");
+
+  return {
+    half,
+    neckOuterHalf,
+    neckInnerHalf,
+    centerTopY: v.neckDepth,
+    centerBottomY: v.height,
+  };
+}
+
+/* ---------- 7. component ---------- */
 export interface TshirtSilhouetteProps {
   measurements: SilhouetteMeasurements;
   className?: string;
@@ -307,22 +198,21 @@ export const TshirtSilhouette = ({
   className,
   fill = "hsl(var(--secondary))",
 }: TshirtSilhouetteProps) => {
-  const { paths, viewBox } = useMemo(() => {
-    const sanitized = sanitize(measurements);
-    const base = computeBase(sanitized);
-    const visual = deriveVisual(base);
-    const points = buildPoints(visual);
-    const paths = buildPath(points, visual);
-
-    const sleeveExtent = visual.shoulderHalf + visual.sleeveVisual;
-    const halfW = sleeveExtent + 4;
-    const top = -4;
-    const bottom = visual.height + 4;
+  const { halfPaths, viewBox, visual } = useMemo(() => {
+    const m = sanitize(measurements);
+    const visual = deriveVisual(m);
+    const halfPaths = buildHalf(visual);
+    const sleeveExtent = visual.shoulderHalf + visual.sleeveExt;
+    const halfW = sleeveExtent + 5;
+    const top = -5;
+    const bottom = visual.height + 5;
     const viewBox = `${-halfW} ${top} ${halfW * 2} ${bottom - top}`;
-    return { paths, viewBox };
+    return { halfPaths, viewBox, visual };
   }, [measurements]);
 
   const stroke = "#2B2B2B";
+  const sw = 1.6;
+
   return (
     <svg
       viewBox={viewBox}
@@ -332,31 +222,51 @@ export const TshirtSilhouette = ({
       role="img"
       aria-label="T-shirt silhouette preview"
     >
-      <path
-        d={paths.body}
-        fill={fill}
-        stroke={stroke}
-        strokeWidth={1.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d={paths.neckOuter}
+      <defs>
+        <path id="ts-half" d={halfPaths.half} />
+        <path id="ts-neck-outer-half" d={halfPaths.neckOuterHalf} />
+        <path id="ts-neck-inner-half" d={halfPaths.neckInnerHalf} />
+      </defs>
+
+      {/* Filled body: right half + mirrored left half */}
+      <g fill={fill} stroke="none">
+        <use href="#ts-half" />
+        <use href="#ts-half" transform="scale(-1,1)" />
+        {/* Fill the central seam between the two halves */}
+        <rect
+          x={-0.5}
+          y={visual.neckDepth}
+          width={1}
+          height={visual.height - visual.neckDepth}
+        />
+      </g>
+
+      {/* Outline strokes */}
+      <g
         fill="none"
         stroke={stroke}
-        strokeWidth={1.6}
+        strokeWidth={sw}
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-      <path
-        d={paths.neckInner}
+      >
+        <use href="#ts-half" />
+        <use href="#ts-half" transform="scale(-1,1)" />
+        <use href="#ts-neck-outer-half" />
+        <use href="#ts-neck-outer-half" transform="scale(-1,1)" />
+      </g>
+
+      {/* Inner rib neckline (thinner, lighter) */}
+      <g
         fill="none"
         stroke={stroke}
         strokeWidth={1}
         strokeLinecap="round"
         strokeLinejoin="round"
-        opacity={0.75}
-      />
+        opacity={0.8}
+      >
+        <use href="#ts-neck-inner-half" />
+        <use href="#ts-neck-inner-half" transform="scale(-1,1)" />
+      </g>
     </svg>
   );
 };
