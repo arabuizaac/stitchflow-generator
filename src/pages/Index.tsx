@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
+import tshirtFlat from "@/assets/tshirt-flat.png";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
