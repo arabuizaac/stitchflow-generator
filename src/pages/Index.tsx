@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
+import tshirtFlat from "@/assets/tshirt-flat.png";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -509,6 +510,26 @@ const Index = () => {
                 <span className="hidden sm:inline">Single page</span>
               </Button>
             </div>
+          </div>
+
+          {/* 2D Garment Preview */}
+          <div className="rounded-lg border border-border bg-secondary/30 p-5 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-semibold text-foreground">2D Garment Preview</h4>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Visual guide</span>
+            </div>
+            <div className="flex items-center justify-center p-6 bg-white rounded-md">
+              <img
+                src={tshirtFlat}
+                alt="T-shirt flat sketch"
+                loading="lazy"
+                width={320}
+                className="w-[320px] max-w-[90%] h-auto object-contain"
+              />
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground text-center">
+              This preview helps visualize the final garment shape.
+            </p>
           </div>
 
           <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
