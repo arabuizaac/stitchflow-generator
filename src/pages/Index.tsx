@@ -522,7 +522,7 @@ const Index = () => {
               <GarmentPreview measurements={values} />
             </div>
             <p className="mt-3 text-[11px] text-muted-foreground text-center">
-              This preview helps visualize the final garment shape.
+              Live preview — adjusts subtly as you change measurements.
             </p>
           </div>
 
