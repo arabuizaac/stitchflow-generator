@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
-import tshirtFlat from "@/assets/tshirt-flat.png";
+import { TshirtPreview } from "@/components/TshirtPreview";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -519,16 +519,15 @@ const Index = () => {
               <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Visual guide</span>
             </div>
             <div className="flex items-center justify-center p-6 bg-white rounded-md">
-              <img
-                src={tshirtFlat}
-                alt="T-shirt flat sketch"
-                loading="lazy"
-                width={320}
-                className="w-[320px] max-w-[90%] h-auto object-contain"
+              <TshirtPreview
+                fit={(generated ?? values).fit}
+                sleeveLengthCm={(generated ?? values).sleeveLength}
+                chestCm={(generated ?? values).chest}
+                neckCm={(generated ?? values).neck}
               />
             </div>
             <p className="mt-3 text-[11px] text-muted-foreground text-center">
-              This preview helps visualize the final garment shape.
+              Visual reference only — adapts to your fit, sleeve length and neck. Pattern geometry is unaffected.
             </p>
           </div>
 
