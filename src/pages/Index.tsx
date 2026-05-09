@@ -519,16 +519,10 @@ const Index = () => {
               <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Visual guide</span>
             </div>
             <div className="flex items-center justify-center p-6 bg-white rounded-md">
-              <img
-                src={tshirtFlat}
-                alt="T-shirt flat sketch"
-                loading="lazy"
-                width={320}
-                className="w-[320px] max-w-[90%] h-auto object-contain"
-              />
+              <ResponsiveTshirt values={values} />
             </div>
             <p className="mt-3 text-[11px] text-muted-foreground text-center">
-              This preview helps visualize the final garment shape.
+              Preview reacts subtly to your measurements — silhouette stays true to the fashion flat.
             </p>
           </div>
 
