@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
-import ResponsiveTshirt from "@/components/ResponsiveTshirt";
+import tshirtFlat from "@/assets/tshirt-flat.png";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
@@ -519,10 +519,16 @@ const Index = () => {
               <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Visual guide</span>
             </div>
             <div className="flex items-center justify-center p-6 bg-white rounded-md">
-              <ResponsiveTshirt values={values} />
+              <img
+                src={tshirtFlat}
+                alt="T-shirt flat sketch"
+                loading="lazy"
+                width={320}
+                className="w-[320px] max-w-[90%] h-auto object-contain"
+              />
             </div>
             <p className="mt-3 text-[11px] text-muted-foreground text-center">
-              Preview reacts subtly to your measurements — silhouette stays true to the fashion flat.
+              This preview helps visualize the final garment shape.
             </p>
           </div>
 
