@@ -7,6 +7,12 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
 import { TshirtPreview } from "@/components/TshirtPreview";
+import {
+  MeasurementSections,
+  validateExtras,
+  type Extras,
+  type ExtraKey,
+} from "@/components/MeasurementSections";
 import jsPDF from "jspdf";
 import {
   buildSvgString,
