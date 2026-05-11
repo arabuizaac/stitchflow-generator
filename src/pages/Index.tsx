@@ -72,8 +72,14 @@ const FIELDS: { key: keyof Omit<Measurements, "fit" | "fabric">; label: string; 
 
 const Index = () => {
   const [values, setValues] = useState<Measurements>(DEFAULTS);
+  const [extras, setExtras] = useState<Extras>({});
   const [generated, setGenerated] = useState<Measurements | null>(DEFAULTS);
   const [unit, setUnit] = useState<UnitSystem>("cm");
+
+  const extraIssues = useMemo(
+    () => validateExtras(extras, { chest: values.chest, shoulder: values.shoulder }),
+    [extras, values.chest, values.shoulder],
+  );
 
   const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
