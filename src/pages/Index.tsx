@@ -512,31 +512,19 @@ const Index = () => {
             </div>
           </div>
 
-          {/* 2D Garment Preview */}
-          <div className="rounded-lg border border-border bg-secondary/30 p-5 mb-4">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-sm font-semibold text-foreground">2D Garment Preview</h4>
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Visual guide</span>
-            </div>
-            <div className="flex items-center justify-center p-6 bg-white rounded-md">
-              <TshirtPreview
-                fit={(generated ?? values).fit}
-                sleeveLengthCm={(generated ?? values).sleeveLength}
-                chestCm={(generated ?? values).chest}
-                neckCm={(generated ?? values).neck}
-              />
-            </div>
-            <p className="mt-3 text-[11px] text-muted-foreground text-center">
-              Visual reference only — adapts to your fit, sleeve length and neck. Pattern geometry is unaffected.
-            </p>
-          </div>
 
-          <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
-            {svgString ? (
-              <div className="w-full" dangerouslySetInnerHTML={{ __html: svgString }} />
-            ) : (
-              <p className="text-sm text-muted-foreground">No pattern yet</p>
-            )}
+          <div className="flex-1 flex flex-col mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-foreground">Pattern Pieces</h4>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Technical output</span>
+            </div>
+            <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
+              {svgString ? (
+                <div className="w-full" dangerouslySetInnerHTML={{ __html: svgString }} />
+              ) : (
+                <p className="text-sm text-muted-foreground">No pattern yet</p>
+              )}
+            </div>
           </div>
 
           {pattern && (
@@ -623,6 +611,25 @@ const Index = () => {
                   ))}
                 </div>
               )}
+
+              {/* Garment Preview */}
+              <div className="mt-6 rounded-lg border border-border/60 bg-secondary/20 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-foreground">Garment Preview</h4>
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Visual guide</span>
+                </div>
+                <div className="flex items-center justify-center p-4 bg-white rounded-md">
+                  <TshirtPreview
+                    fit={(generated ?? values).fit}
+                    sleeveLengthCm={(generated ?? values).sleeveLength}
+                    chestCm={(generated ?? values).chest}
+                    neckCm={(generated ?? values).neck}
+                  />
+                </div>
+                <p className="mt-3 text-[11px] text-muted-foreground text-center">
+                  Visual reference only — does not affect pattern geometry.
+                </p>
+              </div>
             </>
           )}
         </Card>
