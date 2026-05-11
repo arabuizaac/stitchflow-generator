@@ -116,6 +116,14 @@ const Index = () => {
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
+    if (extraIssues.length > 0) {
+      toast({
+        title: "Please review measurements",
+        description: `${extraIssues[0].label} ${extraIssues[0].message}.`,
+        variant: "destructive",
+      });
+      return;
+    }
     const parsed = MeasurementsSchema.safeParse(values);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
