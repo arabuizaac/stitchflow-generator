@@ -611,6 +611,25 @@ const Index = () => {
                   ))}
                 </div>
               )}
+
+              {/* Garment Preview */}
+              <div className="mt-6 rounded-lg border border-border/60 bg-secondary/20 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-foreground">Garment Preview</h4>
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Visual guide</span>
+                </div>
+                <div className="flex items-center justify-center p-4 bg-white rounded-md">
+                  <TshirtPreview
+                    fit={(generated ?? values).fit}
+                    sleeveLengthCm={(generated ?? values).sleeveLength}
+                    chestCm={(generated ?? values).chest}
+                    neckCm={(generated ?? values).neck}
+                  />
+                </div>
+                <p className="mt-3 text-[11px] text-muted-foreground text-center">
+                  Visual reference only — does not affect pattern geometry.
+                </p>
+              </div>
             </>
           )}
         </Card>
