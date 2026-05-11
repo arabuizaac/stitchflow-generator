@@ -513,12 +513,18 @@ const Index = () => {
           </div>
 
 
-          <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
-            {svgString ? (
-              <div className="w-full" dangerouslySetInnerHTML={{ __html: svgString }} />
-            ) : (
-              <p className="text-sm text-muted-foreground">No pattern yet</p>
-            )}
+          <div className="flex-1 flex flex-col mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-foreground">Pattern Pieces</h4>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Technical output</span>
+            </div>
+            <div className="flex-1 rounded-lg border border-border bg-white overflow-auto p-3 min-h-[400px] flex items-center justify-center">
+              {svgString ? (
+                <div className="w-full" dangerouslySetInnerHTML={{ __html: svgString }} />
+              ) : (
+                <p className="text-sm text-muted-foreground">No pattern yet</p>
+              )}
+            </div>
           </div>
 
           {pattern && (
