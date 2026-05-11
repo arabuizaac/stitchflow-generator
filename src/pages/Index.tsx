@@ -438,38 +438,29 @@ const Index = () => {
               </p>
             </div>
 
-            <div className="space-y-4">
-              {FIELDS.map((f) => (
-                <div key={f.key} className="space-y-1.5">
-                  <div className="flex items-baseline justify-between">
-                    <Label htmlFor={f.key} className="text-sm font-medium">
-                      {f.label}
-                    </Label>
-                    <span className="text-[11px] text-muted-foreground">{f.hint}</span>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id={f.key}
-                      type="number"
-                      inputMode="decimal"
-                      min={unit === "cm" ? 1 : 0.5}
-                      step={unit === "cm" ? "0.1" : "0.05"}
-                      value={
-                        values[f.key]
-                          ? roundForUnit(fromCm(values[f.key] as number, unit), unit)
-                          : ""
-                      }
-                      onChange={(e) => handleChange(f.key, e.target.value)}
-                      className="pr-12"
-                      required
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
-                      {unitSuffix(unit)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <MeasurementSections
+              unit={unit}
+              primary={{
+                chest: values.chest,
+                shoulder: values.shoulder,
+                neck: values.neck,
+                sleeveLength: values.sleeveLength,
+                shirtLength: values.shirtLength,
+              }}
+              onPrimaryChange={(key, cm) =>
+                setValues((s) => ({ ...s, [key]: cm }))
+              }
+              extras={extras}
+              onExtrasChange={(key, cm) =>
+                setExtras((e) => {
+                  const next = { ...e };
+                  if (cm == null) delete next[key];
+                  else next[key] = cm;
+                  return next;
+                })
+              }
+              issues={extraIssues}
+            />
 
             {corrections.length > 0 && (
               <div className="rounded-md bg-secondary/70 border border-border p-3 text-xs space-y-1">
