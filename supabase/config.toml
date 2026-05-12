@@ -1,1 +1,4 @@
 project_id = "wbxtvhnskbpmqoyljstx"
+
+[functions.analyze-sketch]
+verify_jwt = false
