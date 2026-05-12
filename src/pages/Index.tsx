@@ -7,6 +7,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
 import { TshirtPreview } from "@/components/TshirtPreview";
+import { SketchAnalyzer, type AppliedAttributes } from "@/components/SketchAnalyzer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   MeasurementSections,
   validateExtras,
@@ -294,9 +296,12 @@ const Index = () => {
               <p className="text-xs text-muted-foreground -mt-0.5">T-Shirt Pattern Generator</p>
             </div>
           </div>
-          <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full">
-            <Sparkles className="h-3 w-3" /> Pro
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full">
+              <Sparkles className="h-3 w-3" /> Pro
+            </span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
