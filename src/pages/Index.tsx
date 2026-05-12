@@ -142,6 +142,18 @@ const Index = () => {
     toast({ title: "Pattern generated", description: "T-shirt pattern ready to preview." });
   };
 
+  const handleApplyAi = (a: AppliedAttributes) => {
+    const fitMap: Record<string, FitType> = { slim: "tight", regular: "regular", oversized: "relaxed" };
+    const sleeveMap: Record<string, number> = { sleeveless: 8, cap: 14, short: 22, elbow: 38, long: 60 };
+    const lenMap: Record<string, number> = { cropped: 58, regular: 72, longline: 82 };
+    setValues((s) => ({
+      ...s,
+      ...(a.fitType && fitMap[a.fitType] ? { fit: fitMap[a.fitType] } : {}),
+      ...(a.sleeveType && sleeveMap[a.sleeveType] != null ? { sleeveLength: sleeveMap[a.sleeveType] } : {}),
+      ...(a.garmentLength && lenMap[a.garmentLength] != null ? { shirtLength: lenMap[a.garmentLength] } : {}),
+    }));
+  };
+
   const handleDownloadPdf = async () => {
     if (!pattern) return;
     const bounds = getLayoutBounds(pattern);
