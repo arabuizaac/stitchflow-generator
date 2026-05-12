@@ -343,7 +343,9 @@ const Index = () => {
 
       {/* Form + Preview */}
       <main className="container pb-20 grid gap-6 lg:grid-cols-[380px_1fr]">
-        <Card className="p-6 h-fit shadow-[var(--shadow-card)]">
+        <div className="space-y-6 h-fit">
+        <SketchAnalyzer onApply={handleApplyAi} />
+        <Card className="p-6 shadow-[var(--shadow-card)]">
           <form onSubmit={handleGenerate} className="space-y-5">
             <div>
               <h3 className="font-semibold text-lg">Measurements</h3>
