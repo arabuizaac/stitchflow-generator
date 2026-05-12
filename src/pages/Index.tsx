@@ -500,6 +500,7 @@ const Index = () => {
             </Button>
           </form>
         </Card>
+        </div>
 
         <Card className="p-4 md:p-6 shadow-[var(--shadow-card)] flex flex-col">
           <div className="flex items-center justify-between mb-4 gap-3">
