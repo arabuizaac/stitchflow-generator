@@ -7,6 +7,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { toast } from "@/hooks/use-toast";
 import { Scissors, Download, Sparkles, AlertCircle, CheckCircle2, FileStack, Shirt, Ruler } from "lucide-react";
 import { TshirtPreview } from "@/components/TshirtPreview";
+import { SketchAnalyzer, type AppliedAttributes } from "@/components/SketchAnalyzer";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   MeasurementSections,
   validateExtras,
@@ -138,6 +140,18 @@ const Index = () => {
     setGenerated(corrected);
     setValues(corrected);
     toast({ title: "Pattern generated", description: "T-shirt pattern ready to preview." });
+  };
+
+  const handleApplyAi = (a: AppliedAttributes) => {
+    const fitMap: Record<string, FitType> = { slim: "tight", regular: "regular", oversized: "relaxed" };
+    const sleeveMap: Record<string, number> = { sleeveless: 8, cap: 14, short: 22, elbow: 38, long: 60 };
+    const lenMap: Record<string, number> = { cropped: 58, regular: 72, longline: 82 };
+    setValues((s) => ({
+      ...s,
+      ...(a.fitType && fitMap[a.fitType] ? { fit: fitMap[a.fitType] } : {}),
+      ...(a.sleeveType && sleeveMap[a.sleeveType] != null ? { sleeveLength: sleeveMap[a.sleeveType] } : {}),
+      ...(a.garmentLength && lenMap[a.garmentLength] != null ? { shirtLength: lenMap[a.garmentLength] } : {}),
+    }));
   };
 
   const handleDownloadPdf = async () => {
@@ -294,9 +308,12 @@ const Index = () => {
               <p className="text-xs text-muted-foreground -mt-0.5">T-Shirt Pattern Generator</p>
             </div>
           </div>
-          <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full">
-            <Sparkles className="h-3 w-3" /> Pro
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-secondary px-2.5 py-1 rounded-full">
+              <Sparkles className="h-3 w-3" /> Pro
+            </span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -326,7 +343,9 @@ const Index = () => {
 
       {/* Form + Preview */}
       <main className="container pb-20 grid gap-6 lg:grid-cols-[380px_1fr]">
-        <Card className="p-6 h-fit shadow-[var(--shadow-card)]">
+        <div className="space-y-6 h-fit">
+        <SketchAnalyzer onApply={handleApplyAi} />
+        <Card className="p-6 shadow-[var(--shadow-card)]">
           <form onSubmit={handleGenerate} className="space-y-5">
             <div>
               <h3 className="font-semibold text-lg">Measurements</h3>
@@ -481,6 +500,7 @@ const Index = () => {
             </Button>
           </form>
         </Card>
+        </div>
 
         <Card className="p-4 md:p-6 shadow-[var(--shadow-card)] flex flex-col">
           <div className="flex items-center justify-between mb-4 gap-3">
