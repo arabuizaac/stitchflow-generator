@@ -447,6 +447,41 @@ export function solveSleeveWidthForCap(
   return { width, capLength, iterations, converged };
 }
 
+/**
+ * Inverse of `solveSleeveWidthForCap`: given a fixed sleeve width `W`, find
+ * the cap height whose total cap arc length equals `targetCm`.
+ *
+ * Used when an extras-driven minimum sleeve width (e.g. bicep + ease)
+ * forces us to widen the sleeve beyond the fit-derived solution. We then
+ * raise the cap so the cap arc still matches the armhole within tolerance.
+ */
+export function solveCapHeightForWidth(
+  W: number,
+  targetCm: number,
+  toleranceCm = SLEEVE_TOLERANCE_CM,
+  maxIterations = 60,
+): { capHeight: number; capLength: number; converged: boolean } {
+  // Cap length grows monotonically with cap height for fixed W, so plain
+  // bisection is robust. Lower bound: a tiny cap → cap length ≈ W.
+  let lo = 0.5;
+  let hi = Math.max(W, targetCm) * 1.2;
+  while (sleeveCapLength(W, hi) < targetCm) hi *= 1.5;
+  let mid = (lo + hi) / 2;
+  let capLength = sleeveCapLength(W, mid);
+  let converged = false;
+  for (let i = 0; i < maxIterations; i++) {
+    if (Math.abs(targetCm - capLength) <= toleranceCm) {
+      converged = true;
+      break;
+    }
+    if (capLength < targetCm) lo = mid;
+    else hi = mid;
+    mid = (lo + hi) / 2;
+    capLength = sleeveCapLength(W, mid);
+  }
+  return { capHeight: mid, capLength, converged };
+}
+
 /* ---------- Pattern generation ---------- */
 
 export function generatePattern(input: Measurements): PatternData {
