@@ -210,6 +210,22 @@ export interface PatternData {
     armholeFrontCm: number;
     /** Back armhole arc length (cm) — used for notch verification. */
     armholeBackCm: number;
+    /** Echo of the extended measurements actually applied to geometry. */
+    extras: PatternExtras;
+    /** Diagnostic flags describing how each extra modified geometry. */
+    extrasApplied: {
+      waist: boolean;
+      armhole: boolean;
+      bicep: boolean;
+      wrist: boolean;
+      backWidth: boolean;
+      acrossChest: boolean;
+      frontLength: boolean;
+    };
+    /** Effective front shirt length (cm) after frontLength extra. */
+    frontLength: number;
+    /** Cuff width on long/elbow sleeves driven by wrist extra (cm). */
+    cuffWidth: number;
   };
   measurements: Measurements;
 }
