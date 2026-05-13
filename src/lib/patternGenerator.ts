@@ -897,6 +897,8 @@ interface SleeveArgs {
   sleeveWidth: number;   // cm (full width at cap)
   sleeveLength: number;  // cm
   capHeight: number;     // cm
+  /** Optional cuff width (cm). Defaults to 80% of sleeveWidth. */
+  cuffWidth?: number;
   /** Arc length (cm) along the *front* (left) cap from the underarm. */
   frontNotchFromUnderarm: number;
   /** Arc length (cm) along the *back* (right) cap from the underarm. */
@@ -907,7 +909,10 @@ function buildSleeve(a: SleeveArgs): PatternPiece {
   const W = a.sleeveWidth * MM;
   const L = a.sleeveLength * MM;
   const cap = a.capHeight * MM;
-  const cuffInset = W * 0.1;
+  // Cuff inset = symmetric distance from each side. Driven by cuffWidth
+  // when provided so wrist measurements actually shape the sleeve.
+  const cuffMm = (a.cuffWidth != null ? a.cuffWidth : a.sleeveWidth * 0.8) * MM;
+  const cuffInset = Math.max(0, (W - cuffMm) / 2);
 
   // Coordinates: top-left bbox at (0, 0). Cap top at y=0.
   const leftCap: [number, number] = [0, cap];
@@ -915,6 +920,7 @@ function buildSleeve(a: SleeveArgs): PatternPiece {
   const rightCap: [number, number] = [W, cap];
   const rightCuff: [number, number] = [W - cuffInset, L];
   const leftCuff: [number, number] = [cuffInset, L];
+
 
   // Smooth sleeve cap with two quadratics, slight S-curve
   const leftCtrl: [number, number] = [W * 0.18, cap * 0.15];
