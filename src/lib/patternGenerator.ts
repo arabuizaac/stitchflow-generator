@@ -75,6 +75,24 @@ export const SIZE_GRADES: Record<SizeType, SizeGrade> = {
   XL: { chest:  20, shoulder:  6,   neck:  4, shirtLength:  8, sleeveLength:  4 },
 };
 
+/**
+ * Optional extended tailoring measurements (cm). When present each key
+ * influences real pattern geometry — see `generatePattern`. Absent keys
+ * fall back to chest-derived defaults so existing callers keep working.
+ */
+export interface PatternExtras {
+  waist?: number;
+  armhole?: number;
+  bicep?: number;
+  wrist?: number;
+  backWidth?: number;
+  acrossChest?: number;
+  frontLength?: number;
+  /** Womenswear-only future hooks (stored, not yet drafted into darts). */
+  shoulderToBust?: number;
+  bustSpan?: number;
+}
+
 export interface Measurements {
   chest: number;
   shoulder: number;
@@ -85,6 +103,7 @@ export interface Measurements {
   fabric: FabricType;
   /** Size grade applied to the entered base measurements. Defaults to M. */
   size?: SizeType;
+  extras?: PatternExtras;
 }
 
 /**
@@ -121,6 +140,20 @@ export const MeasurementsSchema = z.object({
   fit: z.enum(["tight", "regular", "relaxed"]),
   fabric: z.enum(["cotton", "jersey", "rib"]).default("cotton"),
   size: z.enum(["S", "M", "L", "XL"]).optional(),
+  extras: z
+    .object({
+      waist: z.number().finite().positive().optional(),
+      armhole: z.number().finite().positive().optional(),
+      bicep: z.number().finite().positive().optional(),
+      wrist: z.number().finite().positive().optional(),
+      backWidth: z.number().finite().positive().optional(),
+      acrossChest: z.number().finite().positive().optional(),
+      frontLength: z.number().finite().positive().optional(),
+      shoulderToBust: z.number().finite().positive().optional(),
+      bustSpan: z.number().finite().positive().optional(),
+    })
+    .partial()
+    .optional(),
 });
 
 export interface Notch {
