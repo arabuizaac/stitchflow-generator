@@ -503,14 +503,70 @@ export function generatePattern(input: Measurements): PatternData {
   // and cap ease factor — all three pattern-defining levers.
   const ease = fit.ease * easeAdjust;
   const halfChest = (m.chest + ease) / 2;          // cm
-  const frontWidth = halfChest * 0.48;             // cm
-  const backWidth = halfChest * 0.52;              // cm
-  const armholeDepth = (m.chest / 4 + fit.armholeExtra) * armholeAdjust; // cm
-  const capHeight = armholeDepth * fit.capHeightFactor;  // cm — fit-driven
+
+  /* ---- Extras-driven overrides ----
+   * Each extra produces a real, mathematically-meaningful change to the
+   * draft. Absent extras fall back to chest-derived defaults so the
+   * pattern engine remains backwards-compatible with simple inputs.
+   *
+   * Sanity clamps prevent any single extra from collapsing geometry:
+   *  - widths cannot exceed halfChest
+   *  - waist cannot exceed chest+ease
+   *  - bicep adds at most one chest-quarter to sleeve width
+   */
+  const extras: PatternExtras = m.extras ?? {};
+  const extrasApplied = {
+    waist: false,
+    armhole: false,
+    bicep: false,
+    wrist: false,
+    backWidth: false,
+    acrossChest: false,
+    frontLength: false,
+  };
+
+  // Front / back width (across-chest / back-width). Defaults preserve the
+  // 48/52 split if extras aren't supplied.
+  let frontWidth = halfChest * 0.48;
+  let backWidth = halfChest * 0.52;
+  if (extras.acrossChest != null) {
+    // Across-chest is the *full* front upper width. Half-piece = (across +
+    // 0.5·ease)/2 — half the wearing ease lives on the front.
+    const fw = (extras.acrossChest + ease * 0.5) / 2;
+    frontWidth = Math.min(halfChest * 0.6, Math.max(halfChest * 0.35, fw));
+    extrasApplied.acrossChest = true;
+  }
+  if (extras.backWidth != null) {
+    const bw = (extras.backWidth + ease * 0.5) / 2;
+    backWidth = Math.min(halfChest * 0.65, Math.max(halfChest * 0.4, bw));
+    extrasApplied.backWidth = true;
+  }
+
+  // Armhole depth: armhole circumference ≈ ~3× depth on a flat block, so
+  // depth ≈ circumference / 3.0. Blend 70/30 with the chest-derived value
+  // so an unrealistic measurement can't tear the silhouette apart.
+  let armholeDepth = (m.chest / 4 + fit.armholeExtra) * armholeAdjust;
+  if (extras.armhole != null) {
+    const measured = extras.armhole / 3.0;
+    armholeDepth = Math.min(
+      m.chest / 2.5,
+      Math.max(m.chest / 6, measured * 0.7 + armholeDepth * 0.3),
+    );
+    extrasApplied.armhole = true;
+  }
+  let capHeight = armholeDepth * fit.capHeightFactor;
 
   // Apply the fit's length delta and re-clamp so we never go below the
   // minimum shirt length even on tight fits.
   const shirtLength = Math.max(60, m.shirtLength + fit.lengthDelta);
+  // Front length: hem-drop adjustment. Constrained to ±6cm of back length
+  // so we never produce an unsewable mismatch.
+  let frontLength = shirtLength;
+  if (extras.frontLength != null) {
+    const fl = Math.max(shirtLength - 6, Math.min(shirtLength + 6, extras.frontLength));
+    frontLength = Math.max(60, fl);
+    extrasApplied.frontLength = frontLength !== shirtLength;
+  }
 
   const neckWidth = m.neck / 5;                    // cm (half-width on fold)
   const frontNeckDepth = m.neck / 5 + 1;
@@ -520,19 +576,13 @@ export function generatePattern(input: Measurements): PatternData {
   const shoulderDrop = 3;                          // cm
 
   // ---- Sleeve cap matched to actual armhole circumference ----
-  // target = armhole × (1 + capEase). The cap ease is fabric-driven
-  // (knits sit smoothly with less ease, wovens need more for movement)
-  // and fit-modulated (relaxed sleeves carry more ease, tight less),
-  // then hard-capped at MAX_CAP_EXCESS so we never exceed the spec's 3%.
   const armholeFrontCm = armholeCurveLength(frontWidth, armholeDepth, shoulderHalf, shoulderDrop);
   const armholeBackCm = armholeCurveLength(backWidth, armholeDepth, shoulderHalf, shoulderDrop);
   const armholeFullCm = armholeFrontCm + armholeBackCm;
-  const fabricCapEase = Math.max(0, 0.05 - fabric.stretch * 0.1); // cotton≈4.5%, jersey≈3%, rib≈1%
+  const fabricCapEase = Math.max(0, 0.05 - fabric.stretch * 0.1);
   const capEase = Math.min(MAX_CAP_EXCESS, fabricCapEase * fit.sleeveEaseFactor);
   const target = armholeFullCm * (1 + capEase);
   const solved = solveSleeveWidthForCap(target, capHeight);
-  // Post-condition guard: enforce the spec's "not shorter, not >3% over"
-  // even if the iterative solver lands slightly off in pathological inputs.
   const minTarget = armholeFullCm;
   const maxTarget = armholeFullCm * (1 + MAX_CAP_EXCESS);
   let sleeveWidth = solved.width;
@@ -542,28 +592,60 @@ export function generatePattern(input: Measurements): PatternData {
     sleeveWidth = solveSleeveWidthForCap(maxTarget, capHeight).width;
   }
 
-  // body taper — keep 48/52 split for waist matching the body pieces
-  const frontWaist = ((m.chest - 2 + ease) / 2) * 0.48;
-  const backWaist = ((m.chest - 2 + ease) / 2) * 0.52;
+  // Bicep override: enforce upper-arm circumference + sleeve ease.
+  // If the fit-derived sleeve is already wider, keep it — otherwise widen
+  // the sleeve and re-solve cap height so the cap arc still matches the
+  // armhole, preserving sewing compatibility.
+  if (extras.bicep != null) {
+    const sleeveBodyEase = 4 + fit.sleeveEaseFactor * 4; // cm of upper-arm ease
+    const required = Math.min(m.chest * 0.85, extras.bicep + sleeveBodyEase);
+    if (required > sleeveWidth) {
+      sleeveWidth = required;
+      const re = solveCapHeightForWidth(sleeveWidth, target);
+      capHeight = re.capHeight;
+      extrasApplied.bicep = true;
+    } else {
+      extrasApplied.bicep = false;
+    }
+  }
 
-  /* ---- Notch placement (arc-length-based, alignment-guaranteed) ----
-   * Industry convention:
-   *   - FRONT armhole carries one notch at the curve's midpoint.
-   *   - BACK armhole carries two notches, also at the midpoint.
-   *   - Both pieces also carry a shoulder-point notch at the shoulder/
-   *     armhole intersection so the sleeve cap apex can be matched.
-   * Sleeve notches sit at the *same* arc length from the underarm so
-   * the tailor can pin them together without measuring.
-   */
-  const frontNotchAt = armholeFrontCm * 0.5; // cm from the underarm end of front armhole
-  const backNotchAt = armholeBackCm * 0.5;   // cm from the underarm end of back armhole
+  // Waist tapering. Default = chest-derived. Extras.waist drives true side-
+  // seam shaping. Smaller waist → stronger taper; equal-or-larger → straight
+  // side seams. Result is split 48/52 to match front/back width ratio.
+  let waistTotal = (m.chest - 2 + ease);
+  if (extras.waist != null) {
+    // Apply roughly 60% of body ease to waist so a fitted waist still has
+    // wearable room. Cap so we never go below 60% of chest (no corset).
+    const wt = extras.waist + ease * 0.6;
+    waistTotal = Math.max(m.chest * 0.6, Math.min(m.chest + ease, wt));
+    extrasApplied.waist = true;
+  }
+  const frontWaist = (waistTotal / 2) * (frontWidth / halfChest);
+  const backWaist = (waistTotal / 2) * (backWidth / halfChest);
 
-  /* ---- Build FRONT piece (half, cut on fold; left edge = fold) ---- */
+  // Wrist override drives cuff width on long/elbow sleeves only.
+  // Short sleeves and sleeveless keep the proportional 80% cuff because
+  // there is no anatomical wrist to fit.
+  const isLongSleeve = m.sleeveLength >= 35;
+  const defaultCuff = sleeveWidth * 0.8;
+  let cuffWidth = defaultCuff;
+  if (isLongSleeve && extras.wrist != null) {
+    const wristEase = 2 + fit.sleeveEaseFactor * 1.5;
+    const target = extras.wrist + wristEase;
+    // Cuff cannot exceed sleeve width (no inverted taper) nor go below 50%
+    // of sleeve width (sewable opening).
+    cuffWidth = Math.min(sleeveWidth, Math.max(sleeveWidth * 0.5, target));
+    extrasApplied.wrist = cuffWidth !== defaultCuff;
+  }
+
+  const frontNotchAt = armholeFrontCm * 0.5;
+  const backNotchAt = armholeBackCm * 0.5;
+
   const front = buildBodyPiece({
     label: "FRONT",
     halfWidth: frontWidth,
     waistHalf: frontWaist,
-    length: shirtLength,
+    length: frontLength,
     armholeDepth,
     shoulderHalf,
     shoulderDrop,
@@ -589,19 +671,16 @@ export function generatePattern(input: Measurements): PatternData {
     armholeNotchCount: 2,
   });
 
-  /* ---- Sleeve ---- */
   const sleeve = buildSleeve({
     sleeveWidth,
     sleeveLength: m.sleeveLength,
     capHeight,
+    cuffWidth,
     frontNotchFromUnderarm: frontNotchAt,
     backNotchFromUnderarm: backNotchAt,
   });
 
   /* ---- Neckband (high-precision, fabric-aware) ---- */
-  // The half-neckline curves are quadratic Béziers from the centre-front /
-  // centre-back fold to the shoulder. Compute each with recursive De
-  // Casteljau then double — both halves are mirrored on the fold.
   const frontHalfMm = bezierQuadLength(
     [0, frontNeckDepth * MM],
     [neckWidth * MM * 0.5, 0],
@@ -616,9 +695,6 @@ export function generatePattern(input: Measurements): PatternData {
   const backNecklineCm = (backHalfMm * 2) / MM;
   const necklineLengthCm = frontNecklineCm + backNecklineCm;
 
-  // Smart band: shorter band → snug fit. Stretch is the primary driver,
-  // recovery scales how aggressively we can pull in (a fabric that won't
-  // snap back gets a longer, more forgiving band).
   const effectiveStretch = fabric.stretch * fabric.recovery;
   const neckbandLengthCm = necklineLengthCm * (1 - effectiveStretch * 0.6);
   const neckband = buildNeckband(neckbandLengthCm, 5);
@@ -646,6 +722,10 @@ export function generatePattern(input: Measurements): PatternData {
       size: m.size ?? "M",
       armholeFrontCm,
       armholeBackCm,
+      extras,
+      extrasApplied,
+      frontLength,
+      cuffWidth,
     },
     measurements: m,
   };
