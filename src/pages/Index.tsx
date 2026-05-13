@@ -143,6 +143,7 @@ const Index = () => {
     }
     const corrected = clampMeasurements(parsed.data as Measurements);
     setGenerated(corrected);
+    setGeneratedExtras(extras);
     setValues(corrected);
     toast({ title: "Pattern generated", description: "T-shirt pattern ready to preview." });
   };
