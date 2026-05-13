@@ -69,22 +69,18 @@ const Index = () => {
   const [values, setValues] = useState<Measurements>(DEFAULTS);
   const [extras, setExtras] = useState<Extras>({});
   const [generated, setGenerated] = useState<Measurements | null>(DEFAULTS);
+  const [generatedExtras, setGeneratedExtras] = useState<Extras>({});
   const [unit, setUnit] = useState<UnitSystem>("cm");
+  const [showDebug, setShowDebug] = useState(false);
 
   const extraIssues = useMemo(
     () => validateExtras(extras, { chest: values.chest, shoulder: values.shoulder }),
     [extras, values.chest, values.shoulder],
   );
 
-  const [showDebug, setShowDebug] = useState(false);
-
-  const generatedWithExtras = useMemo<Measurements | null>(
-    () => (generated ? { ...generated, extras } : null),
-    [generated, extras],
-  );
   const pattern = useMemo(
-    () => (generatedWithExtras ? generatePattern(generatedWithExtras) : null),
-    [generatedWithExtras],
+    () => (generated ? generatePattern({ ...generated, extras: generatedExtras }) : null),
+    [generated, generatedExtras],
   );
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
   // Print-only SVG: no on-screen reference band so the rasterised image
