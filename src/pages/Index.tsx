@@ -69,14 +69,19 @@ const Index = () => {
   const [values, setValues] = useState<Measurements>(DEFAULTS);
   const [extras, setExtras] = useState<Extras>({});
   const [generated, setGenerated] = useState<Measurements | null>(DEFAULTS);
+  const [generatedExtras, setGeneratedExtras] = useState<Extras>({});
   const [unit, setUnit] = useState<UnitSystem>("cm");
+  const [showDebug, setShowDebug] = useState(false);
 
   const extraIssues = useMemo(
     () => validateExtras(extras, { chest: values.chest, shoulder: values.shoulder }),
     [extras, values.chest, values.shoulder],
   );
 
-  const pattern = useMemo(() => (generated ? generatePattern(generated) : null), [generated]);
+  const pattern = useMemo(
+    () => (generated ? generatePattern({ ...generated, extras: generatedExtras }) : null),
+    [generated, generatedExtras],
+  );
   const svgString = useMemo(() => (pattern ? buildSvgString(pattern) : ""), [pattern]);
   // Print-only SVG: no on-screen reference band so the rasterised image
   // matches the geometric layout bounds 1:1 in PDF exports.
@@ -138,6 +143,7 @@ const Index = () => {
     }
     const corrected = clampMeasurements(parsed.data as Measurements);
     setGenerated(corrected);
+    setGeneratedExtras(extras);
     setValues(corrected);
     toast({ title: "Pattern generated", description: "T-shirt pattern ready to preview." });
   };
@@ -636,6 +642,57 @@ const Index = () => {
                 </div>
               )}
 
+              {/* Drafting impact summary — proves extras are *not* decorative */}
+              <div className="mt-4 rounded-md border border-border bg-card p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="text-xs font-semibold">Drafting impact</div>
+                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="h-3 w-3 accent-primary"
+                      checked={showDebug}
+                      onChange={(e) => setShowDebug(e.target.checked)}
+                      data-testid="toggle-debug"
+                    />
+                    Tailor debug overlay
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1 text-[11px]">
+                  {[
+                    { k: "waist", label: "Waist taper" },
+                    { k: "armhole", label: "Armhole depth" },
+                    { k: "bicep", label: "Sleeve / cap rebalance" },
+                    { k: "wrist", label: "Cuff width" },
+                    { k: "backWidth", label: "Back panel width" },
+                    { k: "acrossChest", label: "Front upper width" },
+                    { k: "frontLength", label: "Front hem drop" },
+                  ].map(({ k, label }) => {
+                    const on = (pattern.derived.extrasApplied as Record<string, boolean>)[k];
+                    return (
+                      <div
+                        key={k}
+                        className={
+                          "flex items-center gap-1.5 " +
+                          (on ? "text-foreground" : "text-muted-foreground/70")
+                        }
+                      >
+                        <span
+                          className={
+                            "inline-block h-1.5 w-1.5 rounded-full " +
+                            (on ? "bg-primary" : "bg-muted-foreground/30")
+                          }
+                        />
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[10.5px] text-muted-foreground leading-snug">
+                  Filled dot = extra measurement actively shaped this draft.
+                  Empty dot = chest-derived default in use.
+                </p>
+              </div>
+
               {/* Garment Preview */}
               <div className="mt-6 rounded-lg border border-border/60 bg-secondary/20 p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -644,14 +701,21 @@ const Index = () => {
                 </div>
                 <div className="flex items-center justify-center p-4 bg-white rounded-md">
                   <TshirtPreview
-                    fit={(generated ?? values).fit}
-                    sleeveLengthCm={(generated ?? values).sleeveLength}
-                    chestCm={(generated ?? values).chest}
-                    neckCm={(generated ?? values).neck}
+                    fit={pattern.derived.fit}
+                    sleeveLengthCm={pattern.measurements.sleeveLength}
+                    chestCm={pattern.measurements.chest}
+                    neckCm={pattern.measurements.neck}
+                    waistRatio={
+                      pattern.derived.extrasApplied.waist
+                        ? Math.max(0.78, Math.min(1.08, (generatedExtras.waist ?? pattern.measurements.chest) / pattern.measurements.chest))
+                        : 1
+                    }
+                    cuffRatio={pattern.derived.cuffWidth / pattern.derived.sleeveWidth}
+                    debug={showDebug}
                   />
                 </div>
                 <p className="mt-3 text-[11px] text-muted-foreground text-center">
-                  Visual reference only — does not affect pattern geometry.
+                  Reflects fit, waist taper, sleeve length and cuff. Pattern geometry remains the source of truth.
                 </p>
               </div>
             </>
